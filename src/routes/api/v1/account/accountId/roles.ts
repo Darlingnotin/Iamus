@@ -17,7 +17,7 @@
 import { Router, RequestHandler, Request, Response, NextFunction } from 'express';
 
 import { setupMetaverseAPI, finishMetaverseAPI, tokenFromParams, accountFromParams } from '@Route-Tools/middleware';
-import { accountFromAuthToken, usernameFromParams } from '@Route-Tools/middleware';
+import { accountFromAuthToken, param1FromParams } from '@Route-Tools/middleware';
 import { Accounts } from '@Entities/Accounts';
 
 import { SArray, VKeyedCollection } from '@Tools/vTypes';
@@ -48,7 +48,7 @@ const procGetUserRoles: RequestHandler = (req: Request, resp: Response, next: Ne
 // Add a role to my roles collection.
 // Not implemented as something needs to be done with request_connection, etc
 const procPostUserRoles: RequestHandler = (req: Request, resp: Response, next: NextFunction) => {
-  if (req.vAuthAccount && req.vAuthAccount) {
+  if (req.vAuthAccount && req.vAccount) {
     if (Accounts.isAdmin(req.vAuthAccount)) {
       const roles = IsNullOrEmpty(req.vAccount.roles)
                 ? []        // if no roles info, return empty list
@@ -75,13 +75,14 @@ const procPostUserRoles: RequestHandler = (req: Request, resp: Response, next: N
 
 // Remove a friend from my friend list.
 const procDeleteUserRole: RequestHandler = (req: Request, resp: Response, next: NextFunction) => {
-  if (req.vAuthAccount && req.vAuthAccount) {
+  if (req.vAuthAccount && req.vAccount) {
     if (Accounts.isAdmin(req.vAuthAccount)) {
       if (IsNotNullOrEmpty(req.vAccount.roles)) {
-        const idx = req.vAccount.roles.indexOf(req.vTokenId);
-        if (idx >= 0) {
+        if (SArray.has(req.vAccount.roles, req.vParam1)) {
+          SArray.remove(req.vAccount.roles, req.vParam1);
+
           const updates: VKeyedCollection = {
-            'roles': req.vAccount.roles.splice(idx, 1)
+            'roles': req.vAccount.roles
           };
           Accounts.updateEntityFields(req.vAccount, updates);
         };
@@ -113,10 +114,10 @@ router.post(  '/api/v1/account/:accountId/roles',         [ setupMetaverseAPI,
                                                 procPostUserRoles,
                                                 finishMetaverseAPI
                                               ] );
-router.delete('/api/v1/account/:accountId/roles/:tokenId', [ setupMetaverseAPI,
+router.delete('/api/v1/account/:accountId/roles/:param1', [ setupMetaverseAPI,
                                                 accountFromAuthToken, // req.vAuthAccount
                                                 accountFromParams,    // req.vAccount
-                                                tokenFromParams,      // role to req.vTokenId
+                                                param1FromParams,     // role to req.vParam1
                                                 procDeleteUserRole,
                                                 finishMetaverseAPI
                                               ] );
