@@ -15,7 +15,6 @@ import deepmerge from 'deepmerge';
 import { IsNullOrEmpty, IsNotNullOrEmpty, getMyExternalIPAddress } from '@Tools/Misc';
 import { httpRequest, httpsRequest } from '@Tools/Misc';
 import { Logger } from '@Tools/Logging';
-import { table } from 'console';
 
 export let Config = {
     'metaverse': {
@@ -156,7 +155,38 @@ export async function initializeConfiguration(): Promise<void> {
     const newUrl = `http://${myAddr}:${Config.server["listen-port"].toString()}/`;
     Logger.debug(`initializeConfiguration: built metaverse url of ${newUrl}`);
     Config.metaverse["metaverse-server-url"] = newUrl;
-  }
+  };
+
+  // Make sure the metaverse-server-url does not end in a slash.
+  // There is a bunch of code that expects to add the "/api/v1/..." to this variable.
+  let msu: string = Config.metaverse["metaverse-server-url"];
+  while (msu.endsWith('/')) {
+    msu = msu.slice(0, -1);
+  };
+  Config.metaverse["metaverse-server-url"] = msu;
+
+  // Write a subset of the built configuration information into the 'static' directory
+  //    so the static pages will know our configuration.
+  const configSubset: any = {};
+  configSubset.metaverse = Config.metaverse;
+  configSubset.server = Config.server;
+  configSubset.debug = Config.debug;
+
+  // Depending on how started, the static dir can be in different places
+  const staticBase: string = Config.server['static-base'];
+  for (const staticDir of [ '.' + staticBase, './dist' + staticBase ]) {
+    if (fs.existsSync(staticDir)) {
+      const configSubsetFilename = staticDir + '/config.json';
+      try {
+        fs.writeFileSync(configSubsetFilename, JSON.stringify(configSubset));
+        Logger.info(`initializeConfiguration: wrote static config subset to ${configSubsetFilename}`);
+      }
+      catch (err) {
+        Logger.error(`initializeConfiguration: error writing ${configSubsetFilename}: ${err}`);
+      };
+      break;
+    };
+  };
 
   // Logger.debug(`initializeConfiguration: debug setting: ${JSON.stringify(Config.debug)}`);
   return;

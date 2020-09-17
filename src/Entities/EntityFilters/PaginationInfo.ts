@@ -47,6 +47,12 @@ export class PaginationInfo extends CriteriaFilter {
     // Logger.debug(`PaginstationInfo: pageNum=${this.PageNum}, perPage=${this.PerPage}`);
   }
 
+  // At end of request, pagination adds to the JSON response:
+  // "current_page": num,
+  // "total_pages": num,
+  // "per_page": num,
+  // "total_entries": num
+
   public criteriaTest(pThingy: any): boolean {
     if (! this._doingQuery) {
       if (++this._currentItem > this.PerPage) {
@@ -66,6 +72,7 @@ export class PaginationInfo extends CriteriaFilter {
     };
   };
 
+  /*
   public *filter<T>(pToFilter: Generator<T>) : Generator<T> {
     this._currentPage = 1;
     this._currentItem = 1;
@@ -99,4 +106,5 @@ export class PaginationInfo extends CriteriaFilter {
       };
     };
   };
+  */
 };

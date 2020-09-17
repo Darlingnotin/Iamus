@@ -14,12 +14,13 @@
 'use strict'
 
 import { Entity } from '@Entities/Entity';
+import { AccountEntity } from '@Entities/AccountEntity';
 import { AuthToken } from '@Entities/AuthToken';
 
 import { FieldDefn } from '@Route-Tools/Permissions';
 import { checkAccessToDomain } from '@Route-Tools/Permissions';
-import { isStringValidator, isNumberValidator, isSArraySet } from '@Route-Tools/Permissions';
-import { simpleGetter, simpleSetter, sArraySetter } from '@Route-Tools/Permissions';
+import { isStringValidator, isNumberValidator, isSArraySet, isDateValidator } from '@Route-Tools/Permissions';
+import { simpleGetter, simpleSetter, sArraySetter, dateStringGetter } from '@Route-Tools/Permissions';
 
 import { createSimplifiedPublicKey } from '@Route-Tools/Util';
 import { Logger } from '@Tools/Logging';
@@ -28,10 +29,10 @@ import { VKeyedCollection } from '@Tools/vTypes';
 // NOTE: this class cannot have functions in them as they are just JSON to and from the database
 export class DomainEntity implements Entity {
   public domainId: string;     // globally unique domain identifier
-  public placeName: string;    // place name
+  public name: string;         // domain name/label
   public publicKey: string;    // DomainServers's public key in multi-line PEM format
   public apiKey: string;       // Access key if a temp domain
-  public sponserAccountId: string; // The account that gave this domain an access key
+  public sponsorAccountId: string; // The account that gave this domain an access key
   public iceServerAddr: string;// IP address of ICE server being used by this domain
 
   // Information that comes in via heartbeat
@@ -66,11 +67,12 @@ export class DomainEntity implements Entity {
 // Checks to make sure the getter has permission to get the values.
 // Returns the value. Could be 'undefined' whether the requestor doesn't have permissions or that's
 //     the actual field value.
-export function getDomainField(pAuthToken: AuthToken, pDomain: DomainEntity, pField: string): any {
+export async function getDomainField(pAuthToken: AuthToken, pDomain: DomainEntity,
+                                pField: string, pRequestingAccount?: AccountEntity): Promise<any> {
   let val;
   const perms = domainFields[pField];
   if (perms) {
-    if (checkAccessToDomain(pAuthToken, pDomain, perms.get_permissions)) {
+    if (await checkAccessToDomain(pAuthToken, pDomain, perms.get_permissions, pRequestingAccount)) {
         if (typeof(perms.getter) === 'function') {
           val = perms.getter(perms, pDomain);
         };
@@ -81,18 +83,27 @@ export function getDomainField(pAuthToken: AuthToken, pDomain: DomainEntity, pFi
 // Set a domain field with the fieldname and a value.
 // Checks to make sure the setter has permission to set.
 // Returns 'true' if the value was set and 'false' if the value could not be set.
-export function setDomainField(pAuthToken: AuthToken, pDomain: DomainEntity, pField: string, pVal: any): boolean {
+export async function setDomainField(pAuthToken: AuthToken,  // authorization for making this change
+            pDomain: DomainEntity,              // the domain being changed
+            pField: string, pVal: any,          // field being changed and the new value
+            pRequestingAccount?: AccountEntity, // Account associated with pAuthToken, if known
+            pUpdates?: VKeyedCollection         // where to record updates made (optional)
+                    ): Promise<boolean> {
   let didSet = false;
   const perms = domainFields[pField];
   if (perms) {
     Logger.cdebug('field-setting', `setDomainField: ${pField}=>${JSON.stringify(pVal)}`);
-    if (checkAccessToDomain(pAuthToken, pDomain, perms.set_permissions)) {
+    if (await checkAccessToDomain(pAuthToken, pDomain, perms.set_permissions, pRequestingAccount)) {
       Logger.cdebug('field-setting', `setDomainField: access passed`);
       if (perms.validate(perms, pDomain, pVal)) {
         Logger.cdebug('field-setting', `setDomainField: value validated`);
         if (typeof(perms.setter) === 'function') {
           perms.setter(perms, pDomain, pVal);
           didSet = true;
+          // If the caller passed a place to return the update info, update same
+          if (pUpdates) {
+            getDomainUpdateForField(pDomain, pField, pUpdates);
+          };
         };
       };
     };
@@ -101,33 +112,54 @@ export function setDomainField(pAuthToken: AuthToken, pDomain: DomainEntity, pFi
 };
 // Generate an 'update' block for the specified field or fields.
 // This is a field/value collection that can be passed to the database routines.
-export function getDomainUpdateForField(pDomain: DomainEntity, pField: string | string[]): VKeyedCollection {
-  const ret: VKeyedCollection = {};
+// Note that this directly fetches the field value rather than using 'getter' since
+//     we want the actual value (whatever it is) to go into the database.
+// If an existing VKeyedCollection is passed, it is added to an returned.
+export function getDomainUpdateForField(pDomain: DomainEntity,
+              pField: string | string[], pExisting?: VKeyedCollection): VKeyedCollection {
+  const ret: VKeyedCollection = pExisting ?? {};
   if (Array.isArray(pField)) {
     pField.forEach( fld => {
       const perms = domainFields[fld];
-      if (perms) {
-        ret[perms.entity_field] = perms.getter(perms, pDomain);
-      };
+      makeDomainFieldUpdate(perms, pDomain, ret);
     });
   }
   else {
     const perms = domainFields[pField];
-    if (perms) {
-      ret[perms.entity_field] = perms.getter(perms, pDomain);
-    };
+    makeDomainFieldUpdate(perms, pDomain, ret);
   };
   return ret;
+};
+
+// if the field has an updater, do that, elas just create an update for the base named field
+function makeDomainFieldUpdate(pPerms: FieldDefn, pDomain: DomainEntity, pRet: VKeyedCollection): void {
+  if (pPerms) {
+    if (pPerms.updater) {
+      pPerms.updater(pPerms, pDomain, pRet);
+    }
+    else {
+      pRet[pPerms.entity_field] = (pDomain as any)[pPerms.entity_field];
+    };
+  };
 };
 
 // Naming and access for the fields in a DomainEntity.
 // Indexed by request_field_name.
 export const domainFields: { [key: string]: FieldDefn } = {
-  'place_name': {
-    entity_field: 'placeName',
-    request_field_name: 'place_name',
+  'domainId': {
+    entity_field: 'domainId',
+    request_field_name: 'domainId',
     get_permissions: [ 'all' ],
-    set_permissions: [ 'domain', 'sponser', 'admin' ],
+    set_permissions: [ 'none' ],
+    validate: isStringValidator,
+    setter: simpleSetter,
+    getter: simpleGetter
+  },
+  'name': {
+    entity_field: 'name',
+    request_field_name: 'name',
+    get_permissions: [ 'all' ],
+    set_permissions: [ 'domain', 'sponsor', 'admin' ],
     validate: isStringValidator,
     setter: simpleSetter,
     getter: simpleGetter
@@ -135,17 +167,6 @@ export const domainFields: { [key: string]: FieldDefn } = {
   'public_key': {
     entity_field: 'publicKey',
     request_field_name: 'public_key',
-    get_permissions: [ 'all' ],
-    set_permissions: [ 'domain' ],
-    validate: isStringValidator,
-    setter: simpleSetter,
-    getter: (pField: FieldDefn, pEntity: Entity): any => {
-      return createSimplifiedPublicKey((pEntity as DomainEntity).publicKey);
-    }
-  },
-  'public_key_pem': {
-    entity_field: 'publicKey',
-    request_field_name: 'public_key_pem',
     get_permissions: [ 'all' ],
     set_permissions: [ 'domain' ],
     validate: isStringValidator,
@@ -277,5 +298,42 @@ export const domainFields: { [key: string]: FieldDefn } = {
     validate: isSArraySet,
     setter: sArraySetter,
     getter: simpleGetter
-  }
+  },
+  // admin stuff
+  'addr_of_first_contact': {
+    entity_field: 'iPAddrOfFirstContact',
+    request_field_name: 'addr_of_first_contact',
+    get_permissions: [ 'all' ],
+    set_permissions: [ 'none' ],
+    validate: isStringValidator,
+    setter: simpleSetter,
+    getter: simpleGetter
+  },
+  'when_domain_entry_created': {
+    entity_field: 'whenDomainEntryCreated',
+    request_field_name: 'when_domain_entry_created',
+    get_permissions: [ 'all' ],
+    set_permissions: [ 'none' ],
+    validate: isDateValidator,
+    setter: undefined,
+    getter: dateStringGetter
+  },
+  'time_of_last_heartbeat': {
+    entity_field: 'timeOfLastHeartbeat',
+    request_field_name: 'time_of_last_heartbeat',
+    get_permissions: [ 'all' ],
+    set_permissions: [ 'none' ],
+    validate: isDateValidator,
+    setter: undefined,
+    getter: dateStringGetter
+  },
+  'last_sender_key': {
+    entity_field: 'lastSenderKey',
+    request_field_name: 'last_sender_key',
+    get_permissions: [ 'all' ],
+    set_permissions: [ 'none' ],
+    validate: isStringValidator,
+    setter: simpleSetter,
+    getter: simpleGetter
+  },
 };

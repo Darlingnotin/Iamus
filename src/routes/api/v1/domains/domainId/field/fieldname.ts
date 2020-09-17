@@ -16,16 +16,16 @@
 
 import { Router, RequestHandler, Request, Response, NextFunction } from 'express';
 
-import { setupMetaverseAPI, finishMetaverseAPI, tokenFromParams, accountFromParams, domainFromParams } from '@Route-Tools/middleware';
+import { setupMetaverseAPI, finishMetaverseAPI, domainFromParams } from '@Route-Tools/middleware';
 import { accountFromAuthToken, param1FromParams } from '@Route-Tools/middleware';
 
 import { getDomainField, setDomainField, getDomainUpdateForField } from '@Entities/DomainEntity';
 import { Domains } from '@Entities/Domains';
 
 // Get the scope of the logged in account
-const procGetField: RequestHandler = (req: Request, resp: Response, next: NextFunction) => {
+const procGetField: RequestHandler = async (req: Request, resp: Response, next: NextFunction) => {
   if (req.vAuthAccount && req.vDomain) {
-    req.vRestResp.Data = getDomainField(req.vAuthToken, req.vDomain, req.vParam1);
+    req.vRestResp.Data = await getDomainField(req.vAuthToken, req.vDomain, req.vParam1);
   }
   else {
     req.vRestResp.respondFailure('unauthorized');
@@ -35,9 +35,9 @@ const procGetField: RequestHandler = (req: Request, resp: Response, next: NextFu
 
 // Add a role to my roles collection.
 // Not implemented as something needs to be done with request_connection, etc
-const procPostField: RequestHandler = (req: Request, resp: Response, next: NextFunction) => {
+const procPostField: RequestHandler = async (req: Request, resp: Response, next: NextFunction) => {
   if (req.vAuthAccount && req.vDomain) {
-    if (setDomainField(req.vAuthToken, req.vDomain, req.vParam1, req.body)) {
+    if (await setDomainField(req.vAuthToken, req.vDomain, req.vParam1, req.body.set)) {
       // Setting worked so update the database
       const update = getDomainUpdateForField(req.vDomain, req.vParam1);
       Domains.updateEntityFields(req.vDomain, update);

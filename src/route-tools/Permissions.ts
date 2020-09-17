@@ -22,9 +22,8 @@ import { TokenScope } from '@Entities/TokenScope';
 import { Accounts } from '@Entities/Accounts';
 import { Domains } from '@Entities/Domains';
 
-import { SArray } from '@Tools/vTypes';
+import { SArray, VKeyedCollection } from '@Tools/vTypes';
 import { IsNotNullOrEmpty, IsNullOrEmpty } from '@Tools/Misc';
-import { createSimplifiedPublicKey } from './Util';
 import { Logger } from '@Tools/Logging';
 
 // A start at having a table driven access permissions to the Entity attributes.
@@ -37,6 +36,7 @@ import { Logger } from '@Tools/Logging';
 export type getterFunction = (pDfd: FieldDefn, pD: Entity) => any;
 export type setterFunction = (pDfd: FieldDefn, pD: Entity, pV: any) => void;
 export type validateFunction = (pDfd: FieldDefn, pD: Entity, pV: any) => boolean;
+export type updaterFunction = (pDfd: FieldDefn, pD: Entity, pUpdates: VKeyedCollection) => void;
 export interface FieldDefn {
     entity_field: string,
     request_field_name: string,
@@ -44,33 +44,80 @@ export interface FieldDefn {
     set_permissions: string[],
     validate: validateFunction,
     getter: getterFunction,
-    setter: setterFunction
+    setter: setterFunction,
+    updater?: updaterFunction
 };
-export function simpleValidator(pField: FieldDefn, pEntity: Entity, pValue: any): boolean {
+export function noValidation(pField: FieldDefn, pEntity: Entity, pValue: any): boolean {
   return true;
 };
 export function isStringValidator(pField: FieldDefn, pEntity: Entity, pValue: any): boolean {
   return typeof(pValue) === 'string';
 };
 export function isNumberValidator(pField: FieldDefn, pEntity: Entity, pValue: any): boolean {
-  return typeof(pValue) === 'number';
+  return typeof(pValue.set) === 'number';
 };
+export function isDateValidator(pField: FieldDefn, pEntity: Entity, pValue: any): boolean {
+  return pValue instanceof Date;
+};
+// verify the value is a string or a set/add/remove collection of string arrays
 export function isSArraySet(pField: FieldDefn, pEntity: Entity, pValue: any): boolean {
-  if (typeof(pValue) === 'string') {
-    return true;
-  }
-  else {
-    if (pValue && (pValue.set || pValue.add || pValue.remove)) {
-      return true;
+  let ret = false;
+  if (pValue && (pValue.set || pValue.add || pValue.remove)) {
+    Logger.cdebug('field-setting', `isSArraySet: object with one of the fields`);
+    let eachIsOk = true;
+    if (eachIsOk && pValue.set) {
+      eachIsOk = typeof(pValue.set) === 'string' || isSArray(pField, pEntity, pValue.set);
+      Logger.cdebug('field-setting', `isSArraySet: pValue.set is ${eachIsOk}`);
+    };
+    if (eachIsOk && pValue.add) {
+      eachIsOk = typeof(pValue.add) === 'string' || isSArray(pField, pEntity, pValue.add);
+      Logger.cdebug('field-setting', `isSArraySet: pValue.add is ${eachIsOk}`);
+    };
+    if (eachIsOk && pValue.remove) {
+      eachIsOk = typeof(pValue.remove) === 'string' || isSArray(pField, pEntity, pValue.remove);
+      Logger.cdebug('field-setting', `isSArraySet: pValue.remove is ${eachIsOk}`);
+    };
+    ret = eachIsOk;
+  };
+  return ret;
+};
+// Return 'true' is pValue is an array of strings
+export function isSArray(pField: FieldDefn, pEntity: Entity, pValue: any): boolean {
+  let ret = false;
+  if (pValue) {
+    if (Array.isArray(pValue)) {
+      let allStrings = true;
+      for (const val of pValue) {
+        if (typeof(val) !== 'string') {
+          allStrings = false;
+          break;
+        };
+      };
+      ret = allStrings;
     };
   };
-  return false;
+  Logger.cdebug('field-setting', `isSArray: "${JSON.stringify(pValue)} is ${ret}`);
+  return ret;
 };
 export function simpleGetter(pField: FieldDefn, pEntity: Entity): any {
-  return (pEntity as any)[pField.entity_field];
+  if (pEntity.hasOwnProperty(pField.entity_field)) {
+    return (pEntity as any)[pField.entity_field];
+  };
+  return undefined;
 };
 export function simpleSetter(pField: FieldDefn, pEntity: Entity, pVal: any): void {
-  (pEntity as any)[pField.entity_field] = pVal;
+  if (pEntity.hasOwnProperty(pField.entity_field)) {
+    if (pVal.set) {
+      (pEntity as any)[pField.entity_field] = pVal;
+    };
+  };
+};
+export function dateStringGetter(pField: FieldDefn, pEntity: Entity): string {
+  if (pEntity.hasOwnProperty(pField.entity_field)) {
+    const dateVal: Date = (pEntity as any)[pField.entity_field];
+    return dateVal ? dateVal.toISOString() : undefined;
+  };
+  return undefined;
 };
 // SArray setting. The passed value can be a string (which is added to the SValue)
 //     or an object with the field 'set', 'add' or 'remove'. The values of  the
@@ -80,7 +127,14 @@ export function sArraySetter(pField: FieldDefn, pEntity: Entity, pVal: any): voi
   if (IsNullOrEmpty(val)) {
     Logger.cdebug('field-setting', `sArraySetting: setting "${pField.entity_field}" Starting with null value`);
     val = [];
+  }
+  else {
+    // Kludge for old entiries that are just a string rather than a prople SArray
+    if (typeof(val) === 'string') {
+      val = [ val ];
+    };
   };
+
   if (typeof(pVal) === 'string') {
     Logger.cdebug('field-setting', `sArraySetting: adding string ${pField.entity_field}`);
     SArray.add(val, pVal);
@@ -88,7 +142,8 @@ export function sArraySetter(pField: FieldDefn, pEntity: Entity, pVal: any): voi
   else {
     if (pVal && (pVal.set || pVal.add || pVal.remove)) {
       if (pVal.set) {
-        val = pVal.set;
+        // this relies on the validator to make sure we're passed clean values
+        val = (typeof(pVal.set) === 'string') ? [ pVal.set ] : pVal.set;
       };
       if (pVal.add) {
         if (Array.isArray(pVal.add)) {
@@ -106,7 +161,7 @@ export function sArraySetter(pField: FieldDefn, pEntity: Entity, pVal: any): voi
         if (Array.isArray(pVal.remove)) {
           Logger.cdebug('field-setting', `sArraySetting: removing array ${pField.entity_field}=>${JSON.stringify(pVal.remove)}`);
           for (const aVal of pVal.remove) {
-            SArray.add(val, aVal);
+            SArray.remove(val, aVal);
           };
         }
         else {
@@ -126,8 +181,9 @@ export function sArraySetter(pField: FieldDefn, pEntity: Entity, pVal: any): voi
 //  'friend': the requesting account is a friend of the target account
 //  'connection': the requesting account is a connection of the target account
 //  'admin': the requesting account has 'admin' privilages
-//  'sponser': the requesting account is the sponsor of the traget domain
+//  'sponsor': the requesting account is the sponsor of the traget domain
 export class Perm {
+  public static NONE     = 'none';
   public static ALL      = 'all';
   public static DOMAIN   = 'domain';
   public static OWNER    = 'owner';
@@ -151,27 +207,29 @@ export async function checkAccessToDomain(pAuthToken: AuthToken,       // token 
   let canAccess: boolean = false;
   if (IsNotNullOrEmpty(pAuthToken) && IsNotNullOrEmpty(pTargetDomain)) {
     for (const perm of pRequiredAccess) {
+      Logger.cdebug('field-setting', `checkAccessToDomain: checking ${perm}`);
       switch (perm) {
         case Perm.ALL:
           canAccess = true;
           break;
         case Perm.DOMAIN:
           if (SArray.has(pAuthToken.scope, TokenScope.DOMAIN)) {
-            canAccess = pAuthToken.accountId === pTargetDomain.sponserAccountId;
+            Logger.cdebug('field-setting', `checkAccessToDomain: authToken is domain. auth.AccountId=${pAuthToken.accountId}, sponsor=${pTargetDomain.sponsorAccountId}`);
+            canAccess = pAuthToken.accountId === pTargetDomain.sponsorAccountId;
           };
           break;
-        case Perm.OWNER:
-          canAccess = pAuthToken.accountId === pTargetDomain.sponserAccountId;
-          break;
         case Perm.ADMIN:
+          // If the authToken is an account, verify that the account has administrative access
           if (SArray.has(pAuthToken.scope, TokenScope.OWNER)) {
             const acct = pAuthTokenAccount ?? await Accounts.getAccountWithId(pAuthToken.accountId);
+            Logger.cdebug('field-setting', `checkAccessToDomain: admin. auth.AccountId=${pAuthToken.accountId}`);
             canAccess = Accounts.isAdmin(acct);
           };
           break;
         case Perm.SPONSOR:
           if (SArray.has(pAuthToken.scope, TokenScope.OWNER)) {
-            canAccess = pAuthToken.accountId === pTargetDomain.sponserAccountId;
+            Logger.cdebug('field-setting', `checkAccessToDomain: check sponsor. auth.AccountId=${pAuthToken.accountId}, sponsor=${pTargetDomain.sponsorAccountId}`);
+            canAccess = pAuthToken.accountId === pTargetDomain.sponsorAccountId;
           };
           break;
         default:
@@ -182,6 +240,7 @@ export async function checkAccessToDomain(pAuthToken: AuthToken,       // token 
       if (canAccess) break;
     };
   };
+  Logger.cdebug('field-setting', `checkAccessToDomain: canAccess=${canAccess}`);
   return canAccess;
 };
 
@@ -197,31 +256,121 @@ export async function checkAccessToAccount(pAuthToken: AuthToken,  // token bein
                             pRequiredAccess: string[],      // permissions required to access domain
                             pRequestingAccount?: AccountEntity  // requesting account if known
                     ): Promise<boolean> {
+  let requestingAccount = pRequestingAccount;
   let canAccess: boolean = false;
-  const requestingAcct = pRequestingAccount ?? await Accounts.getAccountWithId(pAuthToken.accountId);
-  for (const perm of pRequiredAccess) {
-    switch (perm) {
-      case 'all':
-        canAccess = true;
-        break;
-      case 'owner': break;
-        canAccess = pAuthToken.accountId === pTargetAccount.accountId;
-        break;
-      case 'friend': break;
-        canAccess = SArray.hasNoCase(pTargetAccount.friends, pRequestingAccount.username);
-        break;
-      case 'connection': break;
-        canAccess = SArray.hasNoCase(pTargetAccount.connections, pRequestingAccount.username);
-        break;
-      case 'admin': break;
-        canAccess = Accounts.isAdmin(requestingAcct);
-        break;
-      default:
-        canAccess = true;
-        break;
-    }
-    // If some permission allows access, we are done
-    if (canAccess) break;
-  }
+  if (IsNotNullOrEmpty(pAuthToken) && IsNotNullOrEmpty(pTargetAccount)) {
+    for (const perm of pRequiredAccess) {
+      Logger.cdebug('field-setting', `checkAccessToDomain: checking ${perm}`);
+      switch (perm) {
+        case Perm.ALL:
+          canAccess = true;
+          break;
+        case Perm.OWNER:
+          canAccess = pAuthToken.accountId === pTargetAccount.accountId;
+          break;
+        case Perm.FRIEND:
+          requestingAccount = requestingAccount ?? await Accounts.getAccountWithId(pAuthToken.accountId);
+          canAccess = SArray.hasNoCase(pTargetAccount.friends, requestingAccount.username);
+          break;
+        case Perm.CONNECTION:
+          requestingAccount = requestingAccount ?? await Accounts.getAccountWithId(pAuthToken.accountId);
+          canAccess = SArray.hasNoCase(pTargetAccount.connections, requestingAccount.username);
+          break;
+        case Perm.ADMIN:
+          // If the authToken is an account, verify that the account has administrative access
+          if (SArray.has(pAuthToken.scope, TokenScope.OWNER)) {
+            Logger.cdebug('field-setting', `checkAccessToAccount: admin. auth.AccountId=${pAuthToken.accountId}`);
+            requestingAccount = requestingAccount ?? await Accounts.getAccountWithId(pAuthToken.accountId);
+            canAccess = Accounts.isAdmin(requestingAccount);
+          };
+          break;
+        default:
+          canAccess = false;
+          break;
+      }
+      // If some permission allows access, we are done
+      if (canAccess) break;
+    };
+  };
+  return canAccess;
+};
+
+// Check if the passed AuthToken has access to the passed Entity.
+// Generalized for any Entity. The permissions expect 'accountId' and 'sponsorAccountId'
+//    in the entities.
+// The "required access" parameter lists the type of access the token must have.
+// For instance, a REST request is made to get a list of users, the request token
+//    goes through the list with the permissions [ 'owner', 'admin', 'friend', 'connection' ]
+//    which means the requestor must be the account owner, a friend or connection of the
+//    requested account or the requestor must be an admin.
+// Note that the list of RequiredAccess is a OR list -- any one access type is sufficient.
+export async function checkAccessToEntity(pAuthToken: AuthToken,  // token being used to access
+                            pTargetEntity: Entity,              // entity being accessed
+                            pRequiredAccess: string[],          // permissions required to access domain
+                            pRequestingAccount?: AccountEntity  // requesting account if known
+                    ): Promise<boolean> {
+  let requestingAccount = pRequestingAccount;
+  let canAccess: boolean = false;
+  if (IsNotNullOrEmpty(pAuthToken) && IsNotNullOrEmpty(pTargetEntity)) {
+    for (const perm of pRequiredAccess) {
+      Logger.cdebug('field-setting', `checkAccessToEntity: checking ${perm}`);
+      switch (perm) {
+        case Perm.ALL:
+          canAccess = true;
+          break;
+        case Perm.DOMAIN:
+          // requestor is a domain and it's account is the domain's sponsoring account
+          if (SArray.has(pAuthToken.scope, TokenScope.DOMAIN)) {
+            if (pTargetEntity.hasOwnProperty('sponsorAccountId')) {
+              Logger.cdebug('field-setting', `checkAccessToEntity: authToken is domain. auth.AccountId=${pAuthToken.accountId}, sponsor=${(pTargetEntity as any).sponsorAccountId}`);
+              canAccess = pAuthToken.accountId === (pTargetEntity as any).sponsorAccountId;
+            };
+          };
+          break;
+        case Perm.OWNER:
+          // The requestor is the target entity
+          if (pTargetEntity.hasOwnProperty('accountId')) {
+            canAccess = pAuthToken.accountId === (pTargetEntity as any).accountId;
+          };
+          break;
+        case Perm.FRIEND:
+          // The requestor is a 'friend' of the target entity
+          if (pTargetEntity.hasOwnProperty('friends')) {
+            requestingAccount = requestingAccount ?? await Accounts.getAccountWithId(pAuthToken.accountId);
+            canAccess = SArray.hasNoCase((pTargetEntity as any).friends, requestingAccount.username);
+          };
+          break;
+        case Perm.CONNECTION:
+          // The requestor is a 'connection' of the target entity
+          if (pTargetEntity.hasOwnProperty('connections')) {
+            requestingAccount = requestingAccount ?? await Accounts.getAccountWithId(pAuthToken.accountId);
+            canAccess = SArray.hasNoCase((pTargetEntity as any).connections, requestingAccount.username);
+          };
+          break;
+        case Perm.ADMIN:
+          // If the authToken is an account, has access if admin
+          if (SArray.has(pAuthToken.scope, TokenScope.OWNER)) {
+            Logger.cdebug('field-setting', `checkAccessToEntity: admin. auth.AccountId=${pAuthToken.accountId}`);
+            requestingAccount = requestingAccount ?? await Accounts.getAccountWithId(pAuthToken.accountId);
+            canAccess = Accounts.isAdmin(requestingAccount);
+          };
+          break;
+        case Perm.SPONSOR:
+          // Requestor is a regular account and is the sponsor of the domain
+          if (SArray.has(pAuthToken.scope, TokenScope.OWNER)) {
+            if (pTargetEntity.hasOwnProperty('sponsorAccountId')) {
+              Logger.cdebug('field-setting', `checkAccessToEntity: authToken is domain. auth.AccountId=${pAuthToken.accountId}, sponsor=${(pTargetEntity as any).sponsorAccountId}`);
+              canAccess = pAuthToken.accountId === (pTargetEntity as any).sponsorAccountId;
+            };
+          };
+          break;
+        default:
+          canAccess = false;
+          break;
+      }
+      // If some permission allows access, we are done
+      if (canAccess) break;
+    };
+  };
   return canAccess;
 };

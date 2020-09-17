@@ -19,12 +19,33 @@ import { setupMetaverseAPI, finishMetaverseAPI } from '@Route-Tools/middleware';
 import { accountFromAuthToken, accountFromParams } from '@Route-Tools/middleware';
 import { tokenFromParams } from '@Route-Tools/middleware';
 
+import { Perm, checkAccessToEntity } from '@Route-Tools/Permissions';
+import { BuildAccountInfo } from '@Route-Tools/Util';
+
 import { Accounts } from '@Entities/Accounts';
+import { setAccountField, getAccountUpdateForField } from '@Entities/AccountEntity';
 
 import { VKeyedCollection } from '@Tools/vTypes';
 import { Logger } from '@Tools/Logging';
 
 // metaverseServerApp.use(express.urlencoded({ extended: false }));
+
+const procGetAccountId: RequestHandler = async (req: Request, resp: Response, next: NextFunction) => {
+  if (req.vAuthAccount && req.vAccount) {
+    if (checkAccessToEntity(req.vAuthToken, req.vAccount, [ Perm.OWNER, Perm.ADMIN ])) {
+      req.vRestResp.Data = {
+        account: await BuildAccountInfo(req, req.vAccount)
+      };
+    }
+    else {
+      req.vRestResp.respondFailure('Unauthorized');
+    };
+  }
+  else {
+    req.vRestResp.respondFailure('No account specified');
+  };
+  next();
+};
 
 // Set changable values on an account.
 // The setter must be either an admin account or the account itself
@@ -46,11 +67,44 @@ const procPostAccountId: RequestHandler = async (req: Request, resp: Response, n
             if (valuesToSet.images.hasOwnProperty('tiny')) updated.images.hero = valuesToSet.images.tiny;
           };
           await Accounts.updateEntityFields(req.vAuthAccount, updated);
+
         };
       }
       else {
         req.vRestResp.respondFailure(req.vAccountError ?? 'Unauthorized');
       };
+      // Alternate account update code using the 'setAccountField' routines.
+      // This is better at checking for permissions and value validation but not tested.
+      // It is expected that future Vircadia code would use the individual fieldname operations to change settings.
+      /*
+      const valuesToSet = req.body.accounts;
+      let updates: VKeyedCollection = {};
+      [ 'username', 'email', 'public_key' ].forEach( prop => {
+        if (valuesToSet.hasOwnProperty(prop)) {
+          if (await setAccountField(req.vAuthToken, req.vAccount, prop, valuesToSet.username, req.vAuthAccount)) {
+            updates = getAccountUpdateForField(req.vAccount, prop, updates);
+          };
+        };
+      });
+      if (valuesToSet.hasOwnProperty('images')) {
+        if (valuesToSet.images.hero) {
+          if (await setAccountField(req.vAuthToken, req.vAccount, 'images_hero', valuesToSet.images.hero, req.vAuthAccount)) {
+            updates = getAccountUpdateForField(req.vAccount, 'images_hero', updates);
+          };
+        };
+        if (valuesToSet.images.tiny) {
+          if (await setAccountField(req.vAuthToken, req.vAccount, 'images_tiny', valuesToSet.images.tiny, req.vAuthAccount)) {
+            updates = getAccountUpdateForField(req.vAccount, 'images_tiny', updates);
+          };
+        };
+        if (valuesToSet.images.thumbnail) {
+          if (await setAccountField(req.vAuthToken, req.vAccount, 'images_thumbnail', valuesToSet.images.thumbnail, req.vAuthAccount)) {
+            updates = getAccountUpdateForField(req.vAccount, 'images_thumbnail', updates);
+          };
+        };
+      };
+      await Accounts.updateEntityFields(req.vAuthAccount, updates);
+      */
     }
     else {
       req.vRestResp.respondFailure(req.vAccountError ?? 'Accounts not specified');
@@ -76,6 +130,11 @@ export const name = '/api/v1/account/:accountId';
 
 export const router = Router();
 
+router.get(  '/api/v1/account/:accountId',        [ setupMetaverseAPI,
+                                                    accountFromAuthToken,   // vRestResp.vAuthAccount
+                                                    accountFromParams,
+                                                    procGetAccountId,
+                                                    finishMetaverseAPI ] );
 router.post(  '/api/v1/account/:accountId',       [ setupMetaverseAPI,
                                                     accountFromAuthToken,   // vRestResp.vAuthAccount
                                                     accountFromParams,
