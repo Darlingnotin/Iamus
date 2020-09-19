@@ -17,7 +17,7 @@
 import { Router, RequestHandler, Request, Response, NextFunction } from 'express';
 import { setupMetaverseAPI, finishMetaverseAPI } from '@Route-Tools/middleware';
 import { accountFromAuthToken } from '@Route-Tools/middleware';
-import { BuildAccountInfo } from '@Route-Tools/Util';
+import { buildAccountInfo } from '@Route-Tools/Util';
 
 import { Accounts } from '@Entities/Accounts';
 
@@ -31,7 +31,6 @@ import { createSimplifiedPublicKey } from '@Route-Tools/Util';
 // Return account information
 // The accounts returned depend on the scope (whether admin) and the search criteria (infoer)
 const procGetAccounts: RequestHandler = async (req: Request, resp: Response, next: NextFunction) => {
-  Logger.debug('procGetAccounts');
   if (req.vAuthAccount) {
     const pager = new PaginationInfo();
     const scoper = new AccountScopeFilter(req.vAuthAccount);
@@ -43,7 +42,7 @@ const procGetAccounts: RequestHandler = async (req: Request, resp: Response, nex
     // Loop through all the filtered accounts and create array of info
     const accts: any[] = [];
     for await (const acct of Accounts.enumerateAsync(pager, infoer, scoper)) {
-      accts.push(await BuildAccountInfo(req, acct));
+      accts.push(await buildAccountInfo(req, acct));
     };
 
     req.vRestResp.Data = {
