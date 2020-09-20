@@ -134,7 +134,6 @@ export function buildDomainInfo(pDomain: DomainEntity): any {
     'name': pDomain.name,
     'network_address': pDomain.networkAddr,
     'ice_server_address': pDomain.iceServerAddr
-
   };
 }
 
@@ -144,7 +143,7 @@ export async function buildDomainInfoV1(pDomain: DomainEntity): Promise<any> {
     'domainId': pDomain.domainId,
     'name': pDomain.name,
     'public_key': pDomain.publicKey ? createSimplifiedPublicKey(pDomain.publicKey) : undefined,
-    'sponsor_accountid': pDomain.sponsorAccountId,
+    'sponsor_account_id': pDomain.sponsorAccountId,
     'ice_server_address': pDomain.iceServerAddr,
     'version': pDomain.version,
     'protocol_version': pDomain.protocol,
@@ -153,7 +152,7 @@ export async function buildDomainInfoV1(pDomain: DomainEntity): Promise<any> {
     'restricted': pDomain.restricted,
     'num_users': pDomain.numUsers,
     'anon_users': pDomain.anonUsers,
-    'total_users': pDomain.totalUsers,
+    'total_users': pDomain.numUsers + pDomain.anonUsers,
     'capacity': pDomain.capacity,
     'description': pDomain.description,
     'maturity': pDomain.maturity,
@@ -180,6 +179,20 @@ export async function buildDomainInfoV1(pDomain: DomainEntity): Promise<any> {
     'last_sender_key': pDomain.lastSenderKey,
     'addr_of_first_contact': pDomain.iPAddrOfFirstContact,
     'when_domain_entry_created': pDomain.whenDomainEntryCreated ? pDomain.whenDomainEntryCreated.toISOString() : undefined
+  };
+};
+
+// Return the limited "user" info.. used by /api/v1/users
+export async function buildUserInfo(pReq: Request, pAccount: AccountEntity): Promise<any> {
+  return {
+    'accountId': pAccount.accountId,
+    'username': pAccount.username,
+    'images': {
+      'tiny': pAccount.imagesTiny,
+      'hero': pAccount.imagesHero,
+      'thumbnail': pAccount.imagesThumbnail
+    },
+    'location': await buildLocationInfo(pReq, pAccount),
   };
 };
 
