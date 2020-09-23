@@ -106,14 +106,14 @@ export async function buildLocationInfo(pReq: Request, pAcct: AccountEntity): Pr
           'domain': buildDomainInfo(aDomain),
         },
         'path': pAcct.locationPath,
-        'online': Accounts.isOnline(pReq.vAccount)
+        'online': Accounts.isOnline(pAcct)
       };
     }
     else {
       // The domain doesn't have an ID
       return {
         'node_id': pReq.vSession.sessionId,
-        'online': Accounts.isOnline(pReq.vAccount),
+        'online': Accounts.isOnline(pAcct),
         'root': {
           'domain': {
             'network_address': pAcct.locationNetworkAddress,
@@ -124,7 +124,7 @@ export async function buildLocationInfo(pReq: Request, pAcct: AccountEntity): Pr
     };
   };
   ret.node_id = pReq.vSession.sessionId,
-  ret.online = Accounts.isOnline(pReq.vAccount)
+  ret.online = Accounts.isOnline(pAcct)
   return ret;
 };
 
@@ -133,7 +133,9 @@ export function buildDomainInfo(pDomain: DomainEntity): any {
     'id': pDomain.domainId,
     'name': pDomain.name,
     'network_address': pDomain.networkAddr,
-    'ice_server_address': pDomain.iceServerAddr
+    'ice_server_address': pDomain.iceServerAddr,
+    'time_of_last_heartbeat': pDomain.timeOfLastHeartbeat ? pDomain.timeOfLastHeartbeat.toISOString() : undefined,
+    'num_users': pDomain.numUsers
   };
 }
 
@@ -229,6 +231,8 @@ export async function buildPlaceInfo(pPlace: PlaceEntity, pDomain?: DomainEntity
     'address': pPlace.address,
     'description': pPlace.description,
     'domain': buildDomainInfo(aDomain),
-    'accountId': pPlace.accountId
+    'accountId': pPlace.accountId,
+    'thumbnail': pPlace.thumbnail,
+    'images': pPlace.images
   };
 };

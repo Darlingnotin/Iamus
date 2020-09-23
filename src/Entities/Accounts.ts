@@ -49,7 +49,14 @@ export const Accounts = {
     return null;
   },
   async getAccountWithUsername(pUsername: string): Promise<AccountEntity> {
-    return IsNullOrEmpty(pUsername) ? null : getObject(accountCollection, { 'username': pUsername.toLowerCase() });
+    if (IsNotNullOrEmpty(pUsername)) {
+      // build username query with case-insensitive Regex.
+      // When indexes are added, create a 'username' case-insensitive index.
+      // Need to clean the username of search characters since we're just passing it to the database
+      return getObject(accountCollection,
+                { 'username': new RegExp(['^', pUsername.replace('[\\\*]', ''), '$'].join(''), 'i') } );
+    };
+    return null;
   },
   async getAccountWithNodeId(pNodeId: string): Promise<AccountEntity> {
     return IsNullOrEmpty(pNodeId) ? null : getObject(accountCollection, { 'location.nodeid': pNodeId });
@@ -67,7 +74,7 @@ export const Accounts = {
   createAccount(pUsername: string, pPassword: string, pEmail: string): AccountEntity {
     const newAcct = new AccountEntity();
     newAcct.accountId= GenUUID();
-    newAcct.username = pUsername.toLowerCase();
+    newAcct.username = pUsername;
     newAcct.email = pEmail;
     newAcct.roles = [AccountRoles.USER];
     newAcct.whenAccountCreated = new Date();
@@ -104,9 +111,8 @@ export const Accounts = {
   // getter property that is 'true' if the user has been heard from recently
   isOnline(pAcct: AccountEntity): boolean {
     if (pAcct && pAcct.timeOfLastHeartbeat) {
-      return pAcct.timeOfLastHeartbeat
-          && ((Date.now() - pAcct.timeOfLastHeartbeat.getUTCMilliseconds())
-                < (Config["metaverse-server"]["heartbeat-seconds-until-offline"] * 1000));
+      return (Date.now().valueOf() - pAcct.timeOfLastHeartbeat.valueOf())
+                < (Config["metaverse-server"]["heartbeat-seconds-until-offline"] * 1000);
     };
     return false;
   },
