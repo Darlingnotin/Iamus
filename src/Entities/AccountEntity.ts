@@ -62,7 +62,7 @@ export class AccountEntity implements Entity {
   // ALWAYS USE functions in Roles class to manipulate this list of roles
   public roles: string[];           // account roles (like 'admin')
   public IPAddrOfCreator: string;   // IP address that created this account
-  public whenAccountCreated: Date;  // date of account creation
+  public whenCreated: Date;  // date of account creation
   public timeOfLastHeartbeat: Date; // when we last heard from this user
 };
 
@@ -119,8 +119,10 @@ export const accountFields: { [key: string]: FieldDefn } = {
     get_permissions: [ 'all' ],
     set_permissions: [ 'owner', 'admin' ],
     validate: (pField: FieldDefn, pEntity: Entity, pVal: any): any => {
-      // Check username for latin alpha-numeric
-      return pVal && /^[A-Za-z][A-Za-z0-9+\-_\.]*$/.test(pVal);
+      if (typeof(pVal) === 'string') {
+        // Check username for latin alpha-numeric
+        return /^[A-Za-z][A-Za-z0-9+\-_\.]*$/.test(pVal);
+      };
     },
     setter: simpleSetter,
     getter: simpleGetter
@@ -131,10 +133,16 @@ export const accountFields: { [key: string]: FieldDefn } = {
     get_permissions: [ 'all' ],
     set_permissions: [ 'owner', 'admin' ],
     validate: (pField: FieldDefn, pEntity: Entity, pVal: any): any => {
-      // Check email for sanity
-      return pVal && /^[A-Za-z0-9+\-_\.]+@[A-Za-z0-9-\.]+$/.test(pVal);
+      if (typeof(pVal) === 'string') {
+        // Check email for sanity
+        return /^[A-Za-z0-9+\-_\.]+@[A-Za-z0-9-\.]+$/.test(pVal);
+      };
+      return false;
     },
-    setter: simpleSetter,
+    setter: (pField: FieldDefn, pEntity: Entity, pVal: any): any => {
+      // emails are stored in lower-case
+      (pEntity as AccountEntity).email = (pVal as string).toLowerCase();
+    },
     getter: simpleGetter
   },
   'account_settings': {
@@ -286,7 +294,7 @@ export const accountFields: { [key: string]: FieldDefn } = {
     getter: simpleGetter
   },
   'when_account_created': {
-    entity_field: 'WhenAccountCreated',
+    entity_field: 'whenCreated',
     request_field_name: 'when_account_created',
     get_permissions: [ 'all' ],
     set_permissions: [ 'none' ],

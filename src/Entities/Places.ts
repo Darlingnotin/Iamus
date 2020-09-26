@@ -17,7 +17,7 @@ import { PlaceEntity } from '@Entities/PlaceEntity';
 
 import { CriteriaFilter } from '@Entities/EntityFilters/CriteriaFilter';
 
-import { createObject, getObject, getObjects, updateObjectFields, deleteOne } from '@Tools/Db';
+import { createObject, getObject, getObjects, updateObjectFields, deleteOne, noCaseCollation } from '@Tools/Db';
 
 import { GenUUID, IsNullOrEmpty, IsNotNullOrEmpty, genRandomString } from '@Tools/Misc';
 import { VKeyedCollection } from '@Tools/vTypes';
@@ -29,7 +29,7 @@ export const Places = {
     return IsNullOrEmpty(pPlaceId) ? null : getObject(placeCollection, { 'placeId': pPlaceId });
   },
   async getPlaceWithName(pPlacename: string): Promise<PlaceEntity> {
-    return IsNullOrEmpty(pPlacename) ? null : getObject(placeCollection, { 'name': pPlacename });
+    return IsNullOrEmpty(pPlacename) ? null : getObject(placeCollection, { 'name': pPlacename },  noCaseCollation);
   },
   async addPlace(pPlaceEntity: PlaceEntity) : Promise<PlaceEntity> {
     return IsNullOrEmpty(pPlaceEntity) ? null : createObject(placeCollection, pPlaceEntity);
@@ -39,7 +39,7 @@ export const Places = {
     newPlace.placeId = GenUUID();
     newPlace.name = 'UNKNOWN-' + genRandomString(5);
     newPlace.address = '/0,0,0/0,0,0,0/';
-    newPlace.whenPlaceEntryCreated = new Date();
+    newPlace.whenCreated = new Date();
     return newPlace;
   },
   removePlace(pPlaceEntity: PlaceEntity) : Promise<boolean> {

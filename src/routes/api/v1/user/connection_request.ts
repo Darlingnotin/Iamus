@@ -20,7 +20,7 @@ import { setupMetaverseAPI, finishMetaverseAPI } from '@Route-Tools/middleware';
 import { accountFromAuthToken, usernameFromParams } from '@Route-Tools/middleware';
 import { Logger } from '@Tools/Logging';
 
-const procPostUserConnectionRequest: RequestHandler = (req: Request, resp: Response, next: NextFunction) => {
+const procPostUserConnectionRequest: RequestHandler = async (req: Request, resp: Response, next: NextFunction) => {
   if (req.vAuthAccount) {
     // The client script looks for two types of 'connection' responses.
     // If is sees data.connection == "pending", it trys again and eventually times out
@@ -40,14 +40,14 @@ const procPostUserConnectionRequest: RequestHandler = (req: Request, resp: Respo
       // All this debugging output can go away once nodeId usage is understood.
       if (req.vAuthAccount.locationNodeId) {
         if (req.vAuthAccount.locationNodeId === thisNode) {
-          Logger.debug(`procPostUserConnectionRequest: request from ${req.vAuthAccount.username} and location.nodeid matches main node`);
+          Logger.debug(`procPostUserConnectionRequest: request from ${req.vAuthAccount.username} and locationNodeid matches main node`);
         }
         else {
           if (req.vAuthAccount.locationNodeId === otherNode) {
-            Logger.debug(`procPostUserConnectionRequest: request from ${req.vAuthAccount.username} and location.nodeid matches proposed node`);
+            Logger.debug(`procPostUserConnectionRequest: request from ${req.vAuthAccount.username} and locationNodeid matches proposed node`);
           }
           else {
-            Logger.debug(`procPostUserConnectionRequest: request from ${req.vAuthAccount.username} and location.nodeid does not match either node`);
+            Logger.debug(`procPostUserConnectionRequest: request from ${req.vAuthAccount.username} and locationNodeid does not match either node`);
           };
         };
       }

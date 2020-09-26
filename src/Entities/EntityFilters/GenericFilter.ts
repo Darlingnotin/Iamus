@@ -17,13 +17,16 @@ import { Request } from 'express';
 
 import { CriteriaFilter } from '@Entities/EntityFilters/CriteriaFilter';
 
+// A generic filter wrapper where the caller can pass any criteria.
 export class GenericFilter extends CriteriaFilter {
 
   private _criteria: any;
+  private _sortCriteria: any;
 
-  public constructor(pFilterCriteria: any) {
+  public constructor(pFilterCriteria: any, pSortCriteria?: any) {
     super();
     this._criteria = pFilterCriteria;
+    this._sortCriteria = pSortCriteria;
   }
 
   // Take a request and extract filter parameters
@@ -41,5 +44,8 @@ export class GenericFilter extends CriteriaFilter {
   //     expected to be in the query.
   public criteriaParameters(): any {
     return this._criteria;
+  };
+  public sortCriteriaParameters(): any {
+    return this._sortCriteria;
   };
 };

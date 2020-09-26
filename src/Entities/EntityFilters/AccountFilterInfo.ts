@@ -16,6 +16,7 @@
 import { Request } from 'express';
 import { Accounts } from '@Entities/Accounts';
 import { AccountEntity } from '@Entities/AccountEntity';
+import { Domains } from '@Entities/Domains';
 
 import { CriteriaFilter } from '@Entities/EntityFilters/CriteriaFilter';
 
@@ -24,6 +25,10 @@ import { SArray } from '@Tools/vTypes';
 import { Logger } from '@Tools/Logging';
 
 
+// Process a request that wants to filter Account collection with parameters:
+//    filter=connections|friends|all
+//    status=online|domainId
+//    search=wildcardSearchString
 export class AccountFilterInfo extends CriteriaFilter {
 
   private _requestingAccount: AccountEntity;
@@ -33,6 +38,8 @@ export class AccountFilterInfo extends CriteriaFilter {
   private _friendsList: string[];
   private _findConnections: boolean = false;
   private _connectionsList: string[];
+  private _findDomain: boolean = false;
+  private _targetDomain: string;
 
   private _status: string;  // comma list of "online"
   private _findOnline: boolean = false;
@@ -101,6 +108,14 @@ export class AccountFilterInfo extends CriteriaFilter {
               this._findOnline = true;
               break;
             default:
+              // There is the version where the status is a domainId which
+              //     limits the accounts to the specified domain.
+              //     Also presumes 'online'.
+              if (Domains.couldBeDomainId(statusClass)) {
+                this._findDomain = true;
+                this._findOnline = true;
+                this._targetDomain = statusClass;
+              };
               break;
           };
         });
@@ -108,7 +123,7 @@ export class AccountFilterInfo extends CriteriaFilter {
 
       this._search = String(pRequest.query.search);
 
-      Logger.cdebug('query-detail', `AccountFilterInfo.parametersFromRequest: findFriends=${this._findFriends}, findConn=${this._findConnections}, findOnline=${this._findOnline}`);
+      Logger.cdebug('query-detail', `AccountFilterInfo.parametersFromRequest: findFriends=${this._findFriends}, findConn=${this._findConnections}, findOnline=${this._findOnline}, findDomain=${this._findDomain}`);
     }
     catch (e) {
       Logger.error('AccountFilterInfo: parameters from request: exception: ' + e);
@@ -168,7 +183,14 @@ export class AccountFilterInfo extends CriteriaFilter {
     };
     if (this._findOnline) {
       criteria.timeOfLastHeartbeat = { '$gte': Accounts.dateWhenNotOnline() }
-    }
+    };
+    if (this._findDomain) {
+      criteria.locationDomainId = this._targetDomain
+    };
     return criteria;
+  };
+
+  public sortCriteriaParameters(): any {
+    return null;
   };
 };

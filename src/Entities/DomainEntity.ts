@@ -38,6 +38,7 @@ export class DomainEntity implements Entity {
   public version: string;      // DomainServer's build version (like "K3")
   public protocol: string;     // Protocol version
   public networkAddr: string;  // reported network address
+  public networkPort: string;  // reported network address
   public networkingMode: string;   // one of "full", ?
   public restricted: boolean;  // 'true' if restricted to users with accounts
   public numUsers: number;     // regular users logged in
@@ -52,12 +53,13 @@ export class DomainEntity implements Entity {
   public images: string[];     // collection of images for the domain
   public maturity: string;     // Maturity rating
   public restriction: string;  // Access restrictions ("open")
+  public managers: string[];   // Usernames of people who are domain admins
   public hosts: string[];      // Usernames of people who can be domain "hosts"
   public tags: string[];       // Categories for describing the domain
 
   // admin stuff
   public iPAddrOfFirstContact: string; // IP address that registered this domain
-  public whenDomainEntryCreated: Date; // What the variable name says
+  public whenCreated: Date; // What the variable name says
   public timeOfLastHeartbeat: Date;    // time of last heartbeat
   public lastSenderKey: string;        // a key identifying the sender
 
@@ -110,7 +112,27 @@ export const domainFields: { [key: string]: FieldDefn } = {
     request_field_name: 'name',
     get_permissions: [ 'all' ],
     set_permissions: [ 'domain', 'sponsor', 'admin' ],
-    validate: isStringValidator,
+    validate: (pField: FieldDefn, pEntity: Entity, pVal: any): any => {
+      if (typeof(pVal) === 'string') {
+        return /^[A-Za-z0-9+\-_\.]*$/.test(pVal);
+      };
+      return false;
+    },
+    setter: simpleSetter,
+    getter: simpleGetter
+  },
+  // An alternate way of setting domain name
+  'world_name': {
+    entity_field: 'name',
+    request_field_name: 'world_name',
+    get_permissions: [ 'all' ],
+    set_permissions: [ 'domain', 'sponsor', 'admin' ],
+    validate: (pField: FieldDefn, pEntity: Entity, pVal: any): any => {
+      if (typeof(pVal) === 'string') {
+        return /^[A-Za-z0-9+\-_\.]*$/.test(pVal);
+      };
+      return false;
+    },
     setter: simpleSetter,
     getter: simpleGetter
   },
@@ -156,6 +178,15 @@ export const domainFields: { [key: string]: FieldDefn } = {
     get_permissions: [ 'all' ],
     set_permissions: [ 'domain' ],
     validate: isStringValidator,
+    setter: simpleSetter,
+    getter: simpleGetter
+  },
+  'network_port': {
+    entity_field: 'networkPort',
+    request_field_name: 'network_port',
+    get_permissions: [ 'all' ],
+    set_permissions: [ 'domain' ],
+    validate: isNumberValidator,
     setter: simpleSetter,
     getter: simpleGetter
   },
@@ -258,6 +289,15 @@ export const domainFields: { [key: string]: FieldDefn } = {
     setter: simpleSetter,
     getter: simpleGetter
   },
+  'managers': {
+    entity_field: 'managers',
+    request_field_name: 'managers',
+    get_permissions: [ 'all' ],
+    set_permissions: [ 'domain', 'sponsor', 'admin' ],
+    validate: isSArraySet,
+    setter: sArraySetter,
+    getter: simpleGetter
+  },
   'hosts': {
     entity_field: 'hosts',
     request_field_name: 'hosts',
@@ -287,7 +327,7 @@ export const domainFields: { [key: string]: FieldDefn } = {
     getter: simpleGetter
   },
   'when_domain_entry_created': {
-    entity_field: 'whenDomainEntryCreated',
+    entity_field: 'whenCreated',
     request_field_name: 'when_domain_entry_created',
     get_permissions: [ 'all' ],
     set_permissions: [ 'none' ],

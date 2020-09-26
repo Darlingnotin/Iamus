@@ -15,11 +15,17 @@
 'use strict';
 
 import { Request } from 'express';
+
 import { Accounts } from '@Entities/Accounts';
 import { checkAvailability, AccountEntity } from '@Entities/AccountEntity';
+
 import { Domains } from '@Entities/Domains';
 import { DomainEntity } from '@Entities/DomainEntity';
+
+import { Places } from '@Entities/Places';
 import { PlaceEntity } from '@Entities/PlaceEntity';
+
+import { GenericFilter } from '@Entities/EntityFilters/GenericFilter';
 
 import { createPublicKey } from 'crypto';
 import { VKeyedCollection, VKeyValue } from '@Tools/vTypes';
@@ -103,7 +109,7 @@ export async function buildLocationInfo(pReq: Request, pAcct: AccountEntity): Pr
       return {
         'node_id': pReq.vSession.sessionId,
         'root': {
-          'domain': buildDomainInfo(aDomain),
+          'domain': await buildDomainInfo(aDomain),
         },
         'path': pAcct.locationPath,
         'online': Accounts.isOnline(pAcct)
@@ -128,10 +134,11 @@ export async function buildLocationInfo(pReq: Request, pAcct: AccountEntity): Pr
   return ret;
 };
 
-export function buildDomainInfo(pDomain: DomainEntity): any {
+export async function buildDomainInfo(pDomain: DomainEntity): Promise<any> {
   return {
     'id': pDomain.domainId,
     'name': pDomain.name,
+    'label': pDomain.name,
     'network_address': pDomain.networkAddr,
     'ice_server_address': pDomain.iceServerAddr,
     'time_of_last_heartbeat': pDomain.timeOfLastHeartbeat ? pDomain.timeOfLastHeartbeat.toISOString() : undefined,
@@ -143,8 +150,11 @@ export function buildDomainInfo(pDomain: DomainEntity): any {
 export async function buildDomainInfoV1(pDomain: DomainEntity): Promise<any> {
   return {
     'domainId': pDomain.domainId,
+    'id': pDomain.domainId,       // legacy
     'name': pDomain.name,
+    'label': pDomain.name,        // legacy
     'public_key': pDomain.publicKey ? createSimplifiedPublicKey(pDomain.publicKey) : undefined,
+    'owner_places': await buildPlacesForDomain(pDomain),
     'sponsor_account_id': pDomain.sponsorAccountId,
     'ice_server_address': pDomain.iceServerAddr,
     'version': pDomain.version,
@@ -180,7 +190,7 @@ export async function buildDomainInfoV1(pDomain: DomainEntity): Promise<any> {
     'time_of_last_heartbeat': pDomain.timeOfLastHeartbeat ? pDomain.timeOfLastHeartbeat.toISOString() : undefined,
     'last_sender_key': pDomain.lastSenderKey,
     'addr_of_first_contact': pDomain.iPAddrOfFirstContact,
-    'when_domain_entry_created': pDomain.whenDomainEntryCreated ? pDomain.whenDomainEntryCreated.toISOString() : undefined
+    'when_domain_entry_created': pDomain.whenCreated ? pDomain.whenCreated.toISOString() : undefined
   };
 };
 
@@ -216,7 +226,7 @@ export async function buildAccountInfo(pReq: Request, pAccount: AccountEntity): 
     'location': await buildLocationInfo(pReq, pAccount),
     'friends': pAccount.friends,
     'connections': pAccount.connections,
-    'when_account_created': pAccount.whenAccountCreated ? pAccount.whenAccountCreated.toISOString() : undefined,
+    'when_account_created': pAccount.whenCreated ? pAccount.whenCreated.toISOString() : undefined,
     'time_of_last_heartbeat': pAccount.timeOfLastHeartbeat ? pAccount.timeOfLastHeartbeat.toISOString() : undefined
   };
 };
@@ -224,15 +234,33 @@ export async function buildAccountInfo(pReq: Request, pAccount: AccountEntity): 
 // Return an object with the formatted place information
 // Pass the PlaceEntity and the place's domain if known.
 export async function buildPlaceInfo(pPlace: PlaceEntity, pDomain?: DomainEntity): Promise<any> {
-  const aDomain = pDomain ?? await Domains.getDomainWithId(pPlace.domainId);
-  return {
+  const ret = await buildPlaceInfoSmall(pPlace);
+
+  // if the place points to a domain, add that information also
+  if (IsNotNullOrEmpty(pPlace.domainId)) {
+    const aDomain = pDomain ?? await Domains.getDomainWithId(pPlace.domainId);
+    ret.domain = await buildDomainInfo(aDomain);
+  };
+  return ret;
+};
+// Return the basic information block for a Place
+export async function buildPlaceInfoSmall(pPlace: PlaceEntity): Promise<any> {
+  const ret: VKeyedCollection =  {
     'placeId': pPlace.placeId,
     'name': pPlace.name,
     'address': pPlace.address,
     'description': pPlace.description,
-    'domain': buildDomainInfo(aDomain),
     'accountId': pPlace.accountId,
     'thumbnail': pPlace.thumbnail,
     'images': pPlace.images
   };
+  return ret;
+};
+// Return an array of Places names that are associated with the passed domain
+export async function buildPlacesForDomain(pDomain: DomainEntity): Promise<any[]> {
+  const ret: any[] = [];
+  for await (const aPlace of Places.enumerateAsync(new GenericFilter({ 'domainId': pDomain.domainId }))) {
+    ret.push(await buildPlaceInfoSmall(aPlace));
+  };
+  return ret;
 };

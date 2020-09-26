@@ -31,7 +31,12 @@ import { Logger } from '@Tools/Logging';
 // Get the scope of the logged in account
 const procGetField: RequestHandler = async (req: Request, resp: Response, next: NextFunction) => {
   if (req.vParam1 && req.vParam2) {
-    const aPlace = await Places.getPlaceWithId(req.vParam1);
+    let aPlace = await Places.getPlaceWithId(req.vParam1);
+    if (IsNullOrEmpty(aPlace)) {
+      // Places can be looked up by their name as well as their ID.
+      Logger.debug(`procPostField: couldn't find with placeId. Trying name of "${req.vParam1}"`);
+      aPlace = await Places.getPlaceWithName(req.vParam1);
+    };
     if (aPlace) {
       req.vRestResp.Data = await getPlaceField(req.vAuthToken, aPlace, req.vParam2, req.vAuthAccount);
     }
@@ -80,18 +85,18 @@ const procPostField: RequestHandler = async (req: Request, resp: Response, next:
   next();
 };
 
-export const name = '/api/v1/user/place/:placeId/field/:fieldname';
+export const name = '/api/v1/places/:placeId/field/:fieldname';
 
 export const router = Router();
 
-router.get( '/api/v1/user/place/:param1/field/:param2',
+router.get( '/api/v1/places/:param1/field/:param2',
                                           [ setupMetaverseAPI,    // req.vRestResp
                                             param1FromParams,     // req.vParam1
                                             param2FromParams,     // req.vParam2
                                             procGetField,
                                             finishMetaverseAPI
                                           ] );
-router.post('/api/v1/user/place/:param1/field/:param2',
+router.post('/api/v1/places/:param1/field/:param2',
                                           [ setupMetaverseAPI,    // req.vRestResp
                                             accountFromAuthToken, // req.vAuthAccount
                                             param1FromParams,     // req.vParam1

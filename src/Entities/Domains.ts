@@ -42,6 +42,7 @@ export const Domains = {
   createDomain(): DomainEntity {
     const newDomain = new DomainEntity();
     newDomain.domainId = GenUUID();
+    newDomain.whenCreated = new Date();
     return newDomain;
   },
   removeDomain(pDomainEntity: DomainEntity) : Promise<boolean> {
@@ -57,5 +58,10 @@ export const Domains = {
   // The contents of this entity have been updated
   async updateEntityFields(pEntity: DomainEntity, pFields: VKeyedCollection): Promise<DomainEntity> {
     return updateObjectFields(domainCollection, { domainId: pEntity.domainId }, pFields);
+  },
+  // Return 'true' if the passed string could be a domainId. Used as a precheck before querying the Db.
+  // For the moment, do a simple check to see if it is probably a GUID.
+  couldBeDomainId(pId: string): boolean {
+    return pId.length === 36;
   }
 };

@@ -15,16 +15,18 @@
 
 import { Config } from '@Base/config';
 
-import { MongoClient, Db, DeleteWriteOpResultObject } from 'mongodb';
+import { MongoClient, Db } from 'mongodb';
+
 import deepmerge from 'deepmerge';
 
+// This seems to create a circular reference  that causes variables to not be initialized
 // import { domainCollection } from '@Entities/Domains';
 
-import { VKeyedCollection } from '@Tools/vTypes';
 import { CriteriaFilter } from '@Entities/EntityFilters/CriteriaFilter';
-import { Logger } from '@Tools/Logging';
+
+import { VKeyedCollection } from '@Tools/vTypes';
 import { IsNotNullOrEmpty } from './Misc';
-import { createConnection } from 'net';
+import { Logger } from '@Tools/Logging';
 
 // The initial MongoClient
 export let BaseClient: MongoClient;
@@ -65,6 +67,9 @@ export async function setupDB(): Promise<void> {
 
   // Do any operations to update database formats
   await DoDatabaseFormatChanges();
+
+  await BuildIndexes();
+
   return;
 };
 
@@ -80,9 +85,16 @@ export async function createObject(pCollection: string, pObject: any): Promise<a
 
 // Low level access to database to fetch the first instance of an object matching the criteria
 // Throws exception if anything wrong with the fetch.
-export async function getObject(pCollection: string, pCriteria: any): Promise<any> {
-  return Datab.collection(pCollection)
-    .findOne(pCriteria)
+// You can optionally pass a collation which is used to select index (usually for case-insensitive queries)..
+export async function getObject(pCollection: string, pCriteria: any, pCollation?: any): Promise<any> {
+  if (pCollation) {
+    const cursor = Datab.collection(pCollection).find(pCriteria).collation(pCollation);
+    if (await cursor.hasNext()) {
+      return cursor.next();
+    };
+    return null;
+  };
+  return Datab.collection(pCollection).findOne(pCriteria);
 };
 
 // Low level access to database to update the passed object in the passed collection.
@@ -149,18 +161,27 @@ export async function *getObjects(pCollection: string,
 
   // If a paging filter is passed, incorporate it's search criteria
   let criteria:any = {};
+  let sortCriteria:any
+
   if (pPager) {
     criteria = deepmerge(criteria, pPager.criteriaParameters());
+    sortCriteria = pPager.sortCriteriaParameters ?? sortCriteria;
   };
   if (pInfoer) {
     criteria = deepmerge(criteria, pInfoer.criteriaParameters());
+    sortCriteria = pInfoer.sortCriteriaParameters ?? sortCriteria;
   };
   if (pScoper) {
     criteria = deepmerge(criteria, pScoper.criteriaParameters());
+    sortCriteria = pScoper.sortCriteriaParameters ?? sortCriteria;
   };
 
   Logger.cdebug('db-query-detail', `Db.getObjects: collection=${pCollection}, criteria=${JSON.stringify(criteria)}`);
   const cursor = Datab.collection(pCollection).find(criteria);
+
+  if (sortCriteria) {
+    cursor.sort(sortCriteria);
+  };
 
   while (await cursor.hasNext()) {
     const nextItem = await cursor.next();
@@ -173,38 +194,123 @@ export async function *getObjects(pCollection: string,
   };
 };
 
+const domainCollection = 'domains';
+const accountCollection = 'accounts';
+const placeCollection = 'places';
+
+export let noCaseCollation: any = {
+  locale: 'en_US',
+  strength: 2
+};
+
+async function BuildIndexes() {
+  // Accounts:
+  //    'accountId'
+  //    'username': should be case-less compare. Also update Accounts.getAccountWithUsername()
+  //    'locationNodeId'
+  //    'email'
+  //    what is needed for friends?
+  await Datab.createIndex(accountCollection, { 'accountId': 1 } );
+  await Datab.createIndex(accountCollection, { 'username': 1 },
+                    { collation: noCaseCollation } );
+  await Datab.createIndex(accountCollection, { 'locationNodeId': 1 } );
+  await Datab.createIndex(accountCollection, { 'email': 1 },
+                    { collation: noCaseCollation } );
+  // Domains:
+  //    'domainId'
+  //    'apiKey'
+  //    'lastSenderKey'
+  await Datab.createIndex(domainCollection, { 'domainId': 1 } );
+  await Datab.createIndex(domainCollection, { 'apiKey': 1 } );
+  await Datab.createIndex(domainCollection, { 'lastSenderKey': 1 } );
+  // Places:
+  //    'placeId'
+  //    'name'
+  await Datab.createIndex(placeCollection, { 'placeId': 1 } );
+  await Datab.createIndex(placeCollection, { 'name': 1 },
+                    { collation: { locale: 'en_US', strength: 2 } } );
+};
+
 // Do any database format changes.
 // Eventually, there should be a system of multiple, versioned updates
 //    but, to keep things running, just do the updates needed for now.
 async function DoDatabaseFormatChanges() {
 
-  const domainCollection = 'domains';
-
   // Domain naming changed a little when place_names were added.
   //    so domain.placeName changed to domain.name.
   // If any domain entry exists with 'place_name', replace it with 'name'
-  let placeNameUpdateCount = 0;
+  // await RenameDbField(domainCollection, 'placeName', 'name');
+  let updateCount = 0;
   await Datab.collection(domainCollection).find({ 'placeName': { '$exists': true }})
   .forEach( doc => {
-    placeNameUpdateCount++;
+    updateCount++;
     Datab.collection(domainCollection).updateOne(
             { _id: doc._id},
             { '$rename': { 'placeName': 'name' } }
     );
   });
-  Logger.debug(`Db.DoDatabaseFormatChanges: ${placeNameUpdateCount} Domain.placeName renames`);
+  Logger.debug(`Db.DoDatabaseFormatChanges: ${updateCount} ${domainCollection}.placeName renames`);
 
   // Domain naming changed 'sponserAccountId' =? 'sponsorAccountId'
-  let sponsorUpdateCount = 0;
+  // await RenameDbField(domainCollection, 'sponserAccountId', 'sponsorAccountId');
+  updateCount = 0;
   await Datab.collection(domainCollection).find({ 'sponserAccountId': { '$exists': true }})
   .forEach( doc => {
-    sponsorUpdateCount++;
+    updateCount++;
     Datab.collection(domainCollection).updateOne(
             { _id: doc._id},
             { '$rename': { 'sponserAccountId': 'sponsorAccountId' } }
     );
   });
-  Logger.debug(`Db.DoDatabaseFormatChanges: ${sponsorUpdateCount} Domain.sponserAccountId renames`);
+  Logger.debug(`Db.DoDatabaseFormatChanges: ${updateCount} ${domainCollection}.sponserAccountId renames`);
 
+  // await RenameDbField(domainCollection, 'whenDomainEntryCreated', 'whenCreated');
+  updateCount = 0;
+  await Datab.collection(domainCollection).find({ 'whenDomainEntryCreated': { '$exists': true }})
+  .forEach( doc => {
+    updateCount++;
+    Datab.collection(domainCollection).updateOne(
+            { _id: doc._id},
+            { '$rename': { 'whenDomainEntryCreated': 'whenCreated' } }
+    );
+  });
+  Logger.debug(`Db.DoDatabaseFormatChanges: ${updateCount} ${domainCollection}.whenDomainEntryCreated renames`);
 
+  // await RenameDbField(accountCollection, 'whenAccountCreated', 'whenCreated');
+  updateCount = 0;
+  await Datab.collection(accountCollection).find({ 'whenAccountCreated': { '$exists': true }})
+  .forEach( doc => {
+    updateCount++;
+    Datab.collection(accountCollection).updateOne(
+            { _id: doc._id},
+            { '$rename': { 'whenAccountCreated': 'whenCreated' } }
+    );
+  });
+  Logger.debug(`Db.DoDatabaseFormatChanges: ${updateCount} ${accountCollection}.whenAccountCreated renames`);
+
+  // await RenameDbField(placeCollection, 'whenPlaceEntryCreated', 'whenCreated');
+  updateCount = 0;
+  await Datab.collection(placeCollection).find({ 'whenPlaceEntryCreated': { '$exists': true }})
+  .forEach( doc => {
+    updateCount++;
+    Datab.collection(placeCollection).updateOne(
+            { _id: doc._id},
+            { '$rename': { 'whenPlaceEntryCreated': 'whenCreated' } }
+    );
+  });
+  Logger.debug(`Db.DoDatabaseFormatChanges: ${updateCount} ${placeCollection}.whenPlaceEntryCreated renames`);
+};
+// For unknown reasons, this function does not work. It doesn't find anything to rename.
+// The explicit versions above work but calling this sub-routine does not. Wierd.
+async function RenameDbField(pCollection: string, pFrom: string, pTo: string) {
+  let updateCount = 0;
+  await Datab.collection(pCollection).find({ pFrom: { '$exists': true }})
+  .forEach( doc => {
+    updateCount++;
+    Datab.collection(pCollection).updateOne(
+            { _id: doc._id},
+            { '$rename': { pFrom: pTo } }
+    );
+  });
+  Logger.debug(`Db.DoDatabaseFormatChanges: ${updateCount} ${pCollection}.${pFrom} renames`);
 };
