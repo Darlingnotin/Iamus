@@ -11,15 +11,22 @@
 //   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 //   See the License for the specific language governing permissions and
 //   limitations under the License.
+
 'use strict'
 
-// NOTE: these cannot have instance functions in them as they are just JSON to and from the database
-export class AuthToken {
+// Class to manage the relationships
+// Note: *Entity classes cannot have instance functions because they are created from the database
+export class RelationshipEntity {
   public id: string;
-  public token: string;
-  public refreshToken: string;
-  public scope: string[];         // a array of symbols in Scope class
-  public accountId: string;       // AccountId of associated account
-  public whenCreated: Date;
+  public relationshipType: string;
+
+  // relationship
+  public fromId: string;
+  public toId: string;
+
+  public isFriend: boolean;
+
+  // administration
   public expirationTime: Date;
+  public whenCreated: Date;
 };

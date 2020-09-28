@@ -11,15 +11,23 @@
 //   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 //   See the License for the specific language governing permissions and
 //   limitations under the License.
+
 'use strict'
 
-// NOTE: these cannot have instance functions in them as they are just JSON to and from the database
-export class AuthToken {
+import { IsNotNullOrEmpty } from "@Tools/Misc";
+
+// Class to manage the manipulations on entities scope of application
+// Note: *Entity classes cannot have instance functions because they are created from the database
+export class RequestEntity {
   public id: string;
-  public token: string;
-  public refreshToken: string;
-  public scope: string[];         // a array of symbols in Scope class
-  public accountId: string;       // AccountId of associated account
-  public whenCreated: Date;
+  public requestType: string;
+
+  // requestor and target
+  public requesterId: string;
+  public targetId: string;
+
+  // administration
   public expirationTime: Date;
+  public whenCreated: Date;
 };
+

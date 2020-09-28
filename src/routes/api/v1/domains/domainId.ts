@@ -114,26 +114,17 @@ const procPutDomains: RequestHandler = async (req: Request, resp: Response, next
 
 // DELETE /api/v1/domains/:domainId
 const procDeleteDomains: RequestHandler = async (req: Request, resp: Response, next: NextFunction) => {
-  if (req.vAuthAccount) {
-    if (Accounts.isAdmin(req.vAuthAccount)) {
-      if (req.vDomain) {
-        Domains.removeDomain(req.vDomain);
-
-        // if deleting the domain, also delete its places
-        for await (const place of Places.enumerateAsync(new GenericFilter({ 'domainId': req.vDomain.id }))) {
-          Places.removePlace(place);
-        };
-      }
-      else {
-        req.vRestResp.respondFailure('Target domain does not exist');
-      };
+  if (req.vAuthAccount && req.vDomain) {
+    if (req.vAuthAccount.id === req.vDomain.sponsorAccountId || Accounts.isAdmin(req.vAuthAccount)) {
+      await Domains.removeDomain(req.vDomain);
+      await Domains.removeDomainContext(req.vDomain);
     }
     else {
       req.vRestResp.respondFailure('Not authorized');
     };
   }
   else {
-    req.vRestResp.respondFailure('Not authorized');
+      req.vRestResp.respondFailure('No account or target domain');
   }
   next();
 };
