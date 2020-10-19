@@ -98,7 +98,7 @@ const procPostUserConnectionRequest: RequestHandler = async (req: Request, resp:
         const newRequest = await Requests.createHandshakeRequest(thisNode, otherNode);
         newRequest.requesterAccepted = true;
         newRequest.requestingAccountId = req.vAuthAccount.id;
-        Requests.add(newRequest);
+        await Requests.add(newRequest);
       };
 
       if (pending) {
@@ -123,7 +123,7 @@ async function BuildNewConnection(pRequest: RequestEntity): Promise<void> {
   const requestingAccount = await Accounts.getAccountWithId(pRequest.requestingAccountId);
   const targetAccount = await Accounts.getAccountWithId(pRequest.targetAccountId);
   if (requestingAccount && targetAccount) {
-    Accounts.makeAccountsConnected(requestingAccount, targetAccount);
+    await Accounts.makeAccountsConnected(requestingAccount, targetAccount);
   }
   else {
     Logger.error(`connection_request: acceptance for connection but accounts not found`);
@@ -143,6 +143,17 @@ async function BuildConnectionResponse(req: Request, pOtherAccountId: string): P
   };
 };
 
+// A user is asking for all it's handshake requests to be removed
+const procDeleteUserConnectionRequest: RequestHandler = async (req: Request, resp: Response, next: NextFunction) => {
+  if (req.vAuthAccount) {
+    await Requests.removeAllMyRequests(req.vAuthAccount.id, RequestType.HANDSHAKE);
+  }
+  else {
+    req.vRestResp.respondFailure('unauthorized');
+  };
+  next();
+};
+
 export const name = '/api/v1/user/connection_request';
 
 export const router = Router();
@@ -150,4 +161,8 @@ export const router = Router();
 router.post(  '/api/v1/user/connection_request', [ setupMetaverseAPI,
                                                   accountFromAuthToken,
                                                   procPostUserConnectionRequest,
+                                                  finishMetaverseAPI ] );
+router.delete('/api/v1/user/connection_request', [ setupMetaverseAPI,
+                                                  accountFromAuthToken,
+                                                  procDeleteUserConnectionRequest,
                                                   finishMetaverseAPI ] );

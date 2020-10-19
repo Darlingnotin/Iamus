@@ -20,12 +20,13 @@ import { AccountRoles } from '@Entities/AccountRoles';
 import { AccountAvailability } from '@Entities/AccountAvailability';
 
 import { FieldDefn, Perm } from '@Route-Tools/Permissions';
-import { isStringValidator, isNumberValidator, isSArraySet, isDateValidator } from '@Route-Tools/Permissions';
+import { isStringValidator, isBooleanValidator, isPathValidator, isNumberValidator, isSArraySet, isDateValidator } from '@Route-Tools/Permissions';
 import { simpleGetter, simpleSetter, sArraySetter, dateStringGetter } from '@Route-Tools/Permissions';
 import { verifyAllSArraySetValues } from '@Route-Tools/Permissions';
 import { getEntityField, setEntityField, getEntityUpdateForField } from '@Route-Tools/Permissions';
 
 import { VKeyedCollection } from '@Tools/vTypes';
+import { IsNullOrEmpty } from '@Tools/Misc';
 import { Logger } from '@Tools/Logging';
 
 // NOTE: this class cannot have functions in them as they are just JSON to and from the database
@@ -120,13 +121,19 @@ export const accountFields: { [key: string]: FieldDefn } = {
     entity_field: 'username',
     request_field_name: 'username',
     get_permissions: [ 'all' ],
-    set_permissions: [ 'owner', 'admin' ],
+    set_permissions: [ 'none' ],
     validate: async (pField: FieldDefn, pEntity: Entity, pVal: any): Promise<boolean> => {
+      let valid: boolean = false;
       if (typeof(pVal) === 'string') {
         // Check username for latin alpha-numeric
-        return /^[A-Za-z][A-Za-z0-9+\-_\.]*$/.test(pVal);
+        valid = /^[A-Za-z][A-Za-z0-9+\-_\.]*$/.test(pVal);
       };
-      return false;
+      // Make sure no other account is using this username
+      if (valid) {
+        const otherAccount = await Accounts.getAccountWithUsername(pVal);
+        valid = IsNullOrEmpty(otherAccount) || otherAccount.id === (pEntity as AccountEntity).id;
+      };
+      return valid;
     },
     setter: simpleSetter,
     getter: simpleGetter
@@ -137,11 +144,17 @@ export const accountFields: { [key: string]: FieldDefn } = {
     get_permissions: [ 'all' ],
     set_permissions: [ 'owner', 'admin' ],
     validate: async (pField: FieldDefn, pEntity: Entity, pVal: any): Promise<boolean> => {
+      let valid: boolean = false;
       if (typeof(pVal) === 'string') {
         // Check email for sanity
-        return /^[A-Za-z0-9+\-_\.]+@[A-Za-z0-9-\.]+$/.test(pVal);
+        valid = /^[A-Za-z0-9+\-_\.]+@[A-Za-z0-9-\.]+$/.test(pVal);
       };
-      return false;
+      // Make sure no other account is using this email address
+      if (valid) {
+        const otherAccount = await Accounts.getAccountWithEmail(pVal);
+        valid = IsNullOrEmpty(otherAccount) || otherAccount.id === (pEntity as AccountEntity).id;
+      };
+      return valid;
     },
     setter: (pField: FieldDefn, pEntity: Entity, pVal: any): any => {
       // emails are stored in lower-case
@@ -179,6 +192,69 @@ export const accountFields: { [key: string]: FieldDefn } = {
   'images_thumbnail': {
     entity_field: 'imagesThumbnail',
     request_field_name: 'images_thumbnail',
+    get_permissions: [ 'all' ],
+    set_permissions: [ 'owner', 'admin' ],
+    validate: isStringValidator,
+    setter: simpleSetter,
+    getter: simpleGetter
+  },
+  'connected': {
+    entity_field: 'locationConnected',
+    request_field_name: 'connected',
+    get_permissions: [ 'all' ],
+    set_permissions: [ 'owner', 'admin' ],
+    validate: isBooleanValidator,
+    setter: simpleSetter,
+    getter: simpleGetter
+  },
+  'path': {
+    entity_field: 'locationPath',
+    request_field_name: 'path',
+    get_permissions: [ 'all' ],
+    set_permissions: [ 'owner', 'admin' ],
+    validate: isPathValidator,
+    setter: simpleSetter,
+    getter: simpleGetter
+  },
+  'place_id': {
+    entity_field: 'locationPlaceId',
+    request_field_name: 'place_id',
+    get_permissions: [ 'all' ],
+    set_permissions: [ 'owner', 'admin' ],
+    validate: isStringValidator,
+    setter: simpleSetter,
+    getter: simpleGetter
+  },
+  'domain_id': {
+    entity_field: 'locationDomainId',
+    request_field_name: 'domain_id',
+    get_permissions: [ 'all' ],
+    set_permissions: [ 'owner', 'admin' ],
+    validate: isStringValidator,
+    setter: simpleSetter,
+    getter: simpleGetter
+  },
+  'network_address': {
+    entity_field: 'locationNetworkAddress',
+    request_field_name: 'network_address',
+    get_permissions: [ 'all' ],
+    set_permissions: [ 'owner', 'admin' ],
+    validate: isStringValidator,
+    setter: simpleSetter,
+    getter: simpleGetter
+  },
+  'network_port': {
+    entity_field: 'locationNetworkPort',
+    request_field_name: 'network_port',
+    get_permissions: [ 'all' ],
+    set_permissions: [ 'owner', 'admin' ],
+    validate: isNumberValidator,
+    setter: simpleSetter,
+    getter: simpleGetter
+  },
+  'node_id': {
+    entity_field: 'locationNodeId',
+    request_field_name: 'node_id',
     get_permissions: [ 'all' ],
     set_permissions: [ 'owner', 'admin' ],
     validate: isStringValidator,
