@@ -131,6 +131,7 @@ export async function buildDomainInfo(pDomain: DomainEntity): Promise<any> {
     'name': pDomain.name,
     'label': pDomain.name,
     'network_address': pDomain.networkAddr,
+    'network_port': pDomain.networkPort,
     'ice_server_address': pDomain.iceServerAddr,
     'time_of_last_heartbeat': pDomain.timeOfLastHeartbeat ? pDomain.timeOfLastHeartbeat.toISOString() : undefined,
     'num_users': pDomain.numUsers
@@ -150,7 +151,8 @@ export async function buildDomainInfoV1(pDomain: DomainEntity): Promise<any> {
     'ice_server_address': pDomain.iceServerAddr,
     'version': pDomain.version,
     'protocol_version': pDomain.protocol,
-    'network_addr': pDomain.networkAddr,
+    'network_address': pDomain.networkAddr,
+    'network_port': pDomain.networkPort,
     'networking_mode': pDomain.networkingMode,
     'restricted': pDomain.restricted,
     'num_users': pDomain.numUsers,
@@ -246,7 +248,6 @@ export async function buildPlaceInfoSmall(pPlace: PlaceEntity): Promise<any> {
     'name': pPlace.name,
     'address': pPlace.address,
     'description': pPlace.description,
-    'accountId': pPlace.accountId,
     'thumbnail': pPlace.thumbnail,
     'images': pPlace.images
   };

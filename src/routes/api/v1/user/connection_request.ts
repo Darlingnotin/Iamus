@@ -68,21 +68,27 @@ const procPostUserConnectionRequest: RequestHandler = async (req: Request, resp:
       // Find if there is another requests between these two nodes
       // Note: this is not the accountID but the session nodeId of the avatars
       const previousAsk = await Requests.getWithRequestBetween(thisNode, otherNode,
-                                      RequestType.CONNECTION,
+                                      RequestType.HANDSHAKE,
                                       'requesterNodeId', 'targetNodeId');
       if (IsNotNullOrEmpty(previousAsk)) {
+        Logger.debug(`procPostUserConnectionRequest: previous ask. by=${req.vAuthAccount.id}, this=${thisNode}, other=${otherNode}`);
         // There is an existing connection request
         if (previousAsk.requesterNodeId === thisNode) {
           // This is a request that I've made. See if the other side has accepted
           if (previousAsk.targetAccepted) {
+            Logger.debug(`procPostUserConnectionRequest: was accepted. by=${req.vAuthAccount.id}, this=${thisNode}, other=${otherNode}`);
             // They have accepted! We have a connection!
             await BuildNewConnection(previousAsk);
             await BuildConnectionResponse(req, previousAsk.targetAccountId);
             pending = false;
             // The request itself will timeout and expire
+          }
+          else {
+            Logger.debug(`procPostUserConnectionRequest: other hasn't accepted. by=${req.vAuthAccount.id}, this=${thisNode}, other=${otherNode}`);
           };
         }
         else {
+          Logger.debug(`procPostUserConnectionRequest: I accept. by=${req.vAuthAccount.id}, this=${thisNode}, other=${otherNode}`);
           // There is an existing request to me.
           // Since I'm making the same request, we are mutually involved
           previousAsk.targetAccepted = true;
@@ -96,6 +102,7 @@ const procPostUserConnectionRequest: RequestHandler = async (req: Request, resp:
             pending = false;
           }
           else {
+            Logger.error(`procPostUserConnectionRequest: BuildNewConnection failed. by=${req.vAuthAccount.id}, this=${thisNode}, other=${otherNode}`);
             req.vRestResp.respondFailure('error making connection');
           };
           // The request itself will timeout and expire
@@ -103,6 +110,7 @@ const procPostUserConnectionRequest: RequestHandler = async (req: Request, resp:
       }
       else {
         // There is not a pending request between us. Create one
+        Logger.debug(`procPostUserConnectionRequest: new request. by=${req.vAuthAccount.id}, this=${thisNode}, other=${otherNode}`);
         const newRequest = await Requests.createHandshakeRequest(thisNode, otherNode);
         newRequest.requesterAccepted = true;
         newRequest.requestingAccountId = req.vAuthAccount.id;
@@ -156,6 +164,7 @@ async function BuildConnectionResponse(req: Request, pOtherAccountId: string): P
 // A user is asking for all it's handshake requests to be removed
 const procDeleteUserConnectionRequest: RequestHandler = async (req: Request, resp: Response, next: NextFunction) => {
   if (req.vAuthAccount) {
+    Logger.debug(`procDeleteUserConnectionRequest: deleting for ${req.vAuthAccount.id}`);
     await Requests.removeAllMyRequests(req.vAuthAccount.id, RequestType.HANDSHAKE);
   }
   else {
