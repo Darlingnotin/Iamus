@@ -32,13 +32,13 @@ export class ValueStat extends Stat {
   };
 
   // Called once a second. We don't gather numbers every time
-  Gather(): void {
-    this.DoPullAction();
+  async Gather(): Promise<void> {
+    await this.DoPullAction();
     return;
   };
 
-  Report(): any {
-    const report = super.Report();
+  Report(pReturnHistogram: boolean = true): any {
+    const report = super.Report(pReturnHistogram);
     return report;
   };
 }

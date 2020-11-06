@@ -17,7 +17,7 @@ import { Config } from '@Base/config';
 
 import crypto from 'crypto';
 
-import { AccountEntity, setAccountField } from '@Entities/AccountEntity';
+import { AccountEntity, accountFields, setAccountField } from '@Entities/AccountEntity';
 import { AccountRoles } from '@Entities/AccountRoles';
 import { Domains } from '@Entities/Domains';
 import { Places } from '@Entities/Places';
@@ -25,13 +25,31 @@ import { Tokens } from '@Entities/Tokens';
 import { CriteriaFilter } from '@Entities/EntityFilters/CriteriaFilter';
 import { GenericFilter } from '@Entities/EntityFilters/GenericFilter';
 
-import { createObject, getObject, getObjects, updateObjectFields, deleteOne, noCaseCollation } from '@Tools/Db';
+import { createObject, getObject, getObjects, updateObjectFields, deleteOne, noCaseCollation, countObjects } from '@Tools/Db';
 import { GenUUID, genRandomString, IsNullOrEmpty, IsNotNullOrEmpty } from '@Tools/Misc';
 
 import { VKeyedCollection, SArray } from '@Tools/vTypes';
 import { Logger } from '@Tools/Logging';
 
 export let accountCollection = 'accounts';
+
+// Initialize account management.
+export function initAccounts(): void {
+  // DEBUG DEBUG: for unknown reasons some field ops end up 'undefined'
+  Object.keys(accountFields).forEach( fieldName => {
+    const defn = accountFields[fieldName];
+    if (typeof(defn.validate) !== 'function') {
+      Logger.error(`initAccounts: field ${defn.entity_field} validator is not a function`);
+    };
+    if (typeof(defn.getter) !== 'function') {
+      Logger.error(`initAccounts: field ${defn.entity_field} getter is not a function`);
+    };
+    if (typeof(defn.setter) !== 'function') {
+      Logger.error(`initAccounts: field ${defn.entity_field} setter is not a function`);
+    };
+  });
+  // END DEBUG DEBUG
+};
 
 export const Accounts = {
   async getAccountWithId(pAccountId: string): Promise<AccountEntity> {
@@ -108,8 +126,11 @@ export const Accounts = {
   },
   // The contents of this entity have been updated
   async updateEntityFields(pEntity: AccountEntity, pFields: VKeyedCollection): Promise<AccountEntity> {
-    return updateObjectFields(accountCollection,
-                                new GenericFilter({ 'id': pEntity.id }), pFields);
+    return updateObjectFields(accountCollection, new GenericFilter({ 'id': pEntity.id }), pFields);
+  },
+  // Return the number of accounts that match the criteria
+  async accountCount(pCriteria: CriteriaFilter): Promise<number> {
+    return countObjects(accountCollection, pCriteria);
   },
   createAccount(pUsername: string, pPassword: string, pEmail: string): AccountEntity {
     const newAcct = new AccountEntity();
@@ -129,7 +150,7 @@ export const Accounts = {
   // TODO: add scope (admin) and filter criteria filtering
   //    It's push down to this routine so we could possibly use DB magic for the queries
   async *enumerateAsync(pPager: CriteriaFilter,
-              pInfoer: CriteriaFilter, pScoper: CriteriaFilter): AsyncGenerator<AccountEntity> {
+              pInfoer?: CriteriaFilter, pScoper?: CriteriaFilter): AsyncGenerator<AccountEntity> {
     for await (const acct of getObjects(accountCollection, pPager, pInfoer, pScoper)) {
       yield acct;
     };
@@ -169,6 +190,33 @@ export const Accounts = {
     await setAccountField(adminToken, pTargetAccount, 'connections', { 'add': pRequestingAccount.username }, pTargetAccount, updates);
     await Accounts.updateEntityFields(pTargetAccount, updates);
   },
+  // Remove the named account from the list of connections. Also cleans out the other side
+  async removeConnection(pAccount: AccountEntity, pConnectionName: string) {
+    let updates: VKeyedCollection = {};
+    const adminToken = Tokens.createSpecialAdminToken();
+      await setAccountField(adminToken, pAccount, 'connections', { 'remove': pConnectionName }, pAccount, updates);
+      await setAccountField(adminToken, pAccount, 'friends', { 'remove': pConnectionName }, pAccount, updates);
+      await Accounts.updateEntityFields(pAccount, updates);
+    const otherAccount = await Accounts.getAccountWithUsername(pConnectionName);
+    if (otherAccount) {
+      updates = {};
+      await setAccountField(adminToken, otherAccount, 'connections', { 'remove': pAccount.username }, otherAccount, updates);
+      await setAccountField(adminToken, otherAccount, 'friends', { 'remove': pAccount.username }, otherAccount, updates);
+      await Accounts.updateEntityFields(otherAccount, updates);
+    };
+  },
+  async removeFriend(pAccount: AccountEntity, pFriendName: string) {
+    let updates: VKeyedCollection = {};
+    const adminToken = Tokens.createSpecialAdminToken();
+      await setAccountField(adminToken, pAccount, 'friends', { 'remove': pFriendName }, pAccount, updates);
+      await Accounts.updateEntityFields(pAccount, updates);
+    const otherAccount = await Accounts.getAccountWithUsername(pFriendName);
+    if (otherAccount) {
+      updates = {};
+      await setAccountField(adminToken, otherAccount, 'friends', { 'remove': pAccount.username }, otherAccount, updates);
+      await Accounts.updateEntityFields(otherAccount, updates);
+    };
+  },
   // getter property that is 'true' if the user has been heard from recently
   isOnline(pAcct: AccountEntity): boolean {
     if (pAcct && pAcct.timeOfLastHeartbeat) {
@@ -178,12 +226,12 @@ export const Accounts = {
     return false;
   },
   // Return the ISODate when an account is considered offline
-  dateWhenNotOnline(): string {
+  dateWhenNotOnline(): Date {
     const whenOffline = new Date(
           Date.now()
           - (Config["metaverse-server"]["heartbeat-seconds-until-offline"] * 1000)
     );
-    return whenOffline.toISOString();
+    return whenOffline;
   },
   // getter property that is 'true' if the user is a grid administrator
   isAdmin(pAcct: AccountEntity): boolean {

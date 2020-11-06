@@ -17,6 +17,7 @@ import { Config } from '@Base/config';
 
 import { Stat } from '@Monitoring/Stat';
 import { StatsOs } from '@Monitoring/StatsOs';
+import { StatsMetaverse } from '@Monitoring/StatsMetaverse';
 import { StatsServer } from '@Monitoring/StatsServer';
 
 import { Logger } from '@Tools/Logging';
@@ -32,9 +33,9 @@ export function initMonitoring(): void {
 
     // Stats are called once a second so they can gather histograms
     setInterval( async () => {
-      _statistics.forEach( (stat, name) => {
-          stat.Gather();
-      });
+      for (const stat of _statistics.values()) {
+          await stat.Gather();
+      };
     }, 1000 * 1 );
   };
 };
@@ -62,5 +63,6 @@ export const Monitoring = {
 
 function CreateStats() {
   Monitoring.addStat(new StatsOs());
+  Monitoring.addStat(new StatsMetaverse());
   Monitoring.addStat(new StatsServer());
 };

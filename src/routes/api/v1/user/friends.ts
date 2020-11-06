@@ -17,13 +17,13 @@
 import { Router, RequestHandler, Request, Response, NextFunction } from 'express';
 
 import { setupMetaverseAPI, finishMetaverseAPI } from '@Route-Tools/middleware';
-import { accountFromAuthToken, usernameFromParams } from '@Route-Tools/middleware';
+import { accountFromAuthToken, param1FromParams } from '@Route-Tools/middleware';
 import { Accounts } from '@Entities/Accounts';
 import { getAccountField, setAccountField } from '@Entities/AccountEntity';
 
 import { PaginationInfo } from '@Entities/EntityFilters/PaginationInfo';
 
-import { VKeyedCollection } from '@Tools/vTypes';
+import { SArray, VKeyedCollection } from '@Tools/vTypes';
 import { IsNullOrEmpty, IsNotNullOrEmpty } from '@Tools/Misc';
 
 // Get the friends of the logged in account
@@ -39,33 +39,45 @@ const procGetUserFriends: RequestHandler = async (req: Request, resp: Response, 
     req.vRestResp.Data = {
       'friends': friends
     };
+
+    pager.addResponseFields(req);
   }
   else {
-    req.vRestResp.respondFailure('account token did not work');
+    req.vRestResp.respondFailure('unauthorized');
   };
   next();
 };
 
 // Upgrade a connection to a friend.
-// Not implemented as something needs to be done with request_connection, etc
 const procPostUserFriends: RequestHandler = async (req: Request, resp: Response, next: NextFunction) => {
-  req.vRestResp.respondFailure('cannot add friends this way');
+  if (req.vAuthAccount) {
+    if (req.body.username && typeof(req.body.username) === 'string') {
+      const newFriend = req.body.username;
+      // Verify the username is a connection.
+      const connections: string[] = await getAccountField(req.vAuthToken, req.vAuthAccount, 'connections', req.vAuthAccount) ?? [];
+      if (SArray.hasNoCase(connections, newFriend)) {
+        const updates: VKeyedCollection = {};
+        await setAccountField(req.vAuthToken, req.vAuthAccount, 'friends', { "add": newFriend }, req.vAuthAccount, updates);
+        await Accounts.updateEntityFields(req.vAuthAccount, updates);
+      }
+      else {
+        req.vRestResp.respondFailure('cannot add friend who is not a connection');
+      };
+    }
+    else {
+      req.vRestResp.respondFailure('badly formed request');
+    };
+  }
+  else {
+    req.vRestResp.respondFailure('unauthorized');
+  };
   next();
 };
 
 // Remove a friend from my friend list.
 const procDeleteUserFriends: RequestHandler = async (req: Request, resp: Response, next: NextFunction) => {
   if (req.vAuthAccount) {
-    const removeVal: any = {
-      'remove': [ req.vUsername ]
-    };
-    const updates:VKeyedCollection = {};
-    if (await setAccountField(req.vAuthToken, req.vAuthAccount, 'friends', removeVal, req.vAuthAccount, updates)) {
-      Accounts.updateEntityFields(req.vAuthAccount, updates);
-    }
-    else {
-      req.vRestResp.respondFailure('field could not be modified');
-    };
+    await Accounts.removeFriend(req.vAuthAccount, req.vParam1);
   }
   else {
     req.vRestResp.respondFailure('unauthorized');
@@ -77,19 +89,19 @@ export const name = '/api/v1/user/friends';
 
 export const router = Router();
 
-router.get(   '/api/v1/user/friends',         [ setupMetaverseAPI,
-                                                accountFromAuthToken,
+router.get(   '/api/v1/user/friends',         [ setupMetaverseAPI,    // req.vRestResp, req.vAuthToken
+                                                accountFromAuthToken, // req.vAuthAccount
                                                 procGetUserFriends,
                                                 finishMetaverseAPI
                                               ] );
-router.post(  '/api/v1/user/friends',         [ setupMetaverseAPI,
-                                                accountFromAuthToken,
+router.post(  '/api/v1/user/friends',         [ setupMetaverseAPI,    // req.vRestResp, req.vAuthToken
+                                                accountFromAuthToken, // req.vAuthAccount
                                                 procPostUserFriends,
                                                 finishMetaverseAPI
                                               ] );
-router.delete('/api/v1/user/friends/:username', [ setupMetaverseAPI,
-                                                accountFromAuthToken,
-                                                usernameFromParams,
+router.delete('/api/v1/user/friends/:param1', [ setupMetaverseAPI,  // req.vRestResp, req.vAuthToken
+                                                accountFromAuthToken, // req.vAuthAccount
+                                                param1FromParams,     // req.vParam1
                                                 procDeleteUserFriends,
                                                 finishMetaverseAPI
                                               ] );

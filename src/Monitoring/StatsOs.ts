@@ -30,7 +30,7 @@ export class StatsOs extends Stat {
     super('os', 'os', '');
 
     // Stat that collects the percent of CPU busy
-    const cpuBusy = new ValueStat('cpuBusy', 'os', 'percent', (stat) => {
+    const cpuBusy = new ValueStat('cpuBusy', 'os', 'percent', async (stat) => {
       const cpuInfo = os.cpus();
       let totalBusy = 0;
       let totalIdle = 0;
@@ -48,7 +48,7 @@ export class StatsOs extends Stat {
     Monitoring.addStat(cpuBusy);
 
     // Stat that collects the percent of memory used
-    const memUsage = new ValueStat('memUsage', 'os', 'percent', (stat) => {
+    const memUsage = new ValueStat('memUsage', 'os', 'percent', async (stat) => {
       stat.Event( os.freemem() / os.totalmem() * 100 );
     });
     if (Config.monitoring.history) {
@@ -64,15 +64,15 @@ export class StatsOs extends Stat {
   Gather(): void {
     return;
   }
-  Report() {
+  Report(pReturnHistogram: boolean = true): any {
     return {
       'cpus': os.cpus(),
       'freemem': os.freemem(),
       'totalmem': os.totalmem(),
       'loadavg': os.loadavg(),
       'uptime': os.uptime(),
-      'cpuBusy': Monitoring.getStat('cpuBusy')?.Report(),
-      'memUsage': Monitoring.getStat('memUsage')?.Report()
+      'cpuBusy': Monitoring.getStat('cpuBusy')?.Report(pReturnHistogram),
+      'memUsage': Monitoring.getStat('memUsage')?.Report(pReturnHistogram)
     };
   }
 };

@@ -20,6 +20,9 @@ but they can be changed to eliminate any collection overhead.
 Some of the statistics collect a history of their values. This is returned in the `history`
 section of a statistic's report.
 
+To suppress the return of history information for a
+particular stat, add "?history=no" to the GET request.
+
 The history is given as a set of buckets over time. A history is reported as a set of "buckets"
 that are each of some milliseconds in length. A history description is:
 
@@ -162,6 +165,100 @@ Percent mem used: freeMem / totalMem * 100
         "name": "memUsed",
         "category": "os",
         "unit": "percent",
+        "history": {
+            "perDay": {
+                history in 288, five minute buckets
+            },
+            "perWeek": {
+                history in 168, one hour buckets
+            }
+        }
+    }
+```
+
+## Category "metaverse"
+
+Metaverse statistics.
+
+```
+    {
+        "totalOnline": { totalOnline statistic report },
+        "domainTotalUsers": { domainTotalUsers statistic report},
+        "domainAnonUsers": { domainAnonUsers statistic report},
+        "activeDomains": { activeDomains statistic report}
+    }
+```
+
+### totalOnline
+
+Number of accounts that are sending heartbeats.
+
+```
+    {
+        "name": "totalOnline",
+        "category": "metaverse",
+        "unit": "count",
+        "history": {
+            "perDay": {
+                history in 288, five minute buckets
+            },
+            "perWeek": {
+                history in 168, one hour buckets
+            }
+        }
+    }
+```
+
+### domainTotalUsers
+
+Number of users the domains are reporting.
+
+```
+    {
+        "name": "domainTotalUsers",
+        "category": "metaverse",
+        "unit": "count",
+        "history": {
+            "perDay": {
+                history in 288, five minute buckets
+            },
+            "perWeek": {
+                history in 168, one hour buckets
+            }
+        }
+    }
+```
+
+### domainAnonUsers
+
+Number of anonymous users reported by the domains.
+This count is included in "domainTotalUsers".
+
+```
+    {
+        "name": "domainAnonUsers",
+        "category": "metaverse",
+        "unit": "count",
+        "history": {
+            "perDay": {
+                history in 288, five minute buckets
+            },
+            "perWeek": {
+                history in 168, one hour buckets
+            }
+        }
+    }
+```
+
+### activeDomains
+
+Number of domains that are sending heartbeats to the metaverse-server.
+
+```
+    {
+        "name": "activeDomains",
+        "category": "metaverse",
+        "unit": "count",
         "history": {
             "perDay": {
                 history in 288, five minute buckets

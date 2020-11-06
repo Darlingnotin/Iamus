@@ -17,10 +17,10 @@ import { Entity } from '@Entities/Entity';
 import { AccountEntity } from '@Entities/AccountEntity';
 import { AuthToken } from '@Entities/AuthToken';
 
-import { FieldDefn } from '@Route-Tools/Permissions';
-import { isStringValidator, isNumberValidator, isBooleanValidator, isSArraySet, isDateValidator } from '@Route-Tools/Permissions';
-import { simpleGetter, simpleSetter, noOverwriteSetter, sArraySetter, dateStringGetter } from '@Route-Tools/Permissions';
-import { getEntityField, setEntityField, getEntityUpdateForField } from '@Route-Tools/Permissions';
+import { FieldDefn } from '@Route-Tools/GetterSetter';
+import { isStringValidator, isNumberValidator, isBooleanValidator, isSArraySet, isDateValidator } from '@Route-Tools/GetterSetter';
+import { simpleGetter, simpleSetter, noGetter, noSetter, noOverwriteSetter, sArraySetter, dateStringGetter } from '@Route-Tools/GetterSetter';
+import { getEntityField, setEntityField, getEntityUpdateForField } from '@Route-Tools/GetterSetter';
 
 import { VKeyedCollection } from '@Tools/vTypes';
 import { Logger } from '@Tools/Logging';
@@ -39,7 +39,7 @@ export class DomainEntity implements Entity {
   public protocol: string;     // Protocol version
   public networkAddr: string;  // reported network address
   public networkPort: string;  // reported network address
-  public networkingMode: string;   // one of "full", ?
+  public networkingMode: string;   // one of "full", "ip", "disabled"
   public restricted: boolean;  // 'true' if restricted to users with accounts
   public numUsers: number;     // regular users logged in
   public anonUsers: number;    // number of anonymous users
@@ -189,9 +189,9 @@ export const domainFields: { [key: string]: FieldDefn } = {
     setter: simpleSetter,
     getter: simpleGetter
   },
-  'networking_mode': {
+  'automatic_networking': {
     entity_field: 'networkingMode',
-    request_field_name: 'networking_mode',
+    request_field_name: 'automatic_networking',
     get_permissions: [ 'all' ],
     set_permissions: [ 'domain' ],
     validate: isStringValidator,
@@ -202,7 +202,7 @@ export const domainFields: { [key: string]: FieldDefn } = {
     entity_field: 'numUsers',
     request_field_name: 'num_users',
     get_permissions: [ 'all' ],
-    set_permissions: [ 'domain' ],
+    set_permissions: [ 'domain', 'admin' ],
     validate: isNumberValidator,
     setter: simpleSetter,
     getter: simpleGetter
@@ -211,7 +211,7 @@ export const domainFields: { [key: string]: FieldDefn } = {
     entity_field: 'anonUsers',
     request_field_name: 'num_anon_users',
     get_permissions: [ 'all' ],
-    set_permissions: [ 'domain' ],
+    set_permissions: [ 'domain', 'admin' ],
     validate: isNumberValidator,
     setter: simpleSetter,
     getter: simpleGetter
@@ -322,7 +322,7 @@ export const domainFields: { [key: string]: FieldDefn } = {
     get_permissions: [ 'all' ],
     set_permissions: [ 'none' ],
     validate: isDateValidator,
-    setter: undefined,
+    setter: noSetter,
     getter: dateStringGetter
   },
   'time_of_last_heartbeat': {
@@ -331,7 +331,7 @@ export const domainFields: { [key: string]: FieldDefn } = {
     get_permissions: [ 'all' ],
     set_permissions: [ 'none' ],
     validate: isDateValidator,
-    setter: undefined,
+    setter: noSetter,
     getter: dateStringGetter
   },
   'last_sender_key': {

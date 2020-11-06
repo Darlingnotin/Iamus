@@ -22,7 +22,6 @@ import { checkAccessToEntity, Perm } from '@Route-Tools/Permissions';
 
 import { buildPlaceInfo } from '@Route-Tools/Util';
 
-import { Accounts } from '@Entities/Accounts';
 import { Places } from '@Entities/Places';
 import { setPlaceField } from '@Entities/PlaceEntity';
 
@@ -48,6 +47,8 @@ const procGetPlaces: RequestHandler = async (req: Request, resp: Response, next:
     req.vRestResp.Data = {
       'places': allPlaces
     };
+
+    pager.addResponseFields(req);
   }
   else {
     req.vRestResp.respondFailure('unauthorized');

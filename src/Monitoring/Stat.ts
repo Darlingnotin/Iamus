@@ -16,10 +16,11 @@
 import { Config } from '@Base/config';
 
 import { Histogram } from '@Monitoring/Histogram';
+import { Logger } from '@Tools/Logging';
 import { VKeyedCollection } from '@Tools/vTypes';
 
 // Function that is called for a statistic when pulling its value
-export type updateValueFunction = ( pStat: Stat ) => void;
+export type updateValueFunction = ( pStat: Stat ) => Promise<void>;
 
 export abstract class Stat {
   public name: string;      // the name of the statistic
@@ -49,16 +50,16 @@ export abstract class Stat {
   AddHistogram(pHistogramName: string, pHistogram: Histogram) {
     this._histograms.set(pHistogramName, pHistogram);
   };
-  DoPullAction(): void {
+  async DoPullAction(): Promise<void> {
     if (this.pullAction) {
       if (this.secondsBetweenPulls) {
         if (this.pullCount-- < 0) {
-          this.pullAction(this);
+          await this.pullAction(this);
           this.pullCount = this.secondsBetweenPulls;
         };
       }
       else {
-        this.pullAction(this);
+        await this.pullAction(this);
       };
     };
   };
@@ -67,14 +68,14 @@ export abstract class Stat {
   // Called once a second to do any gathering operation
   abstract Gather(): void;
   // Return an object containing the values in this stat
-  Report(): any {
+  Report(pReturnHistogram: boolean = true): any {
     const report: VKeyedCollection = {
       'name': this.name,
       'category': this.category,
       'unit': this.unit,
       'value': this.value
     };
-    if (this._histograms.size > 0) {
+    if (pReturnHistogram && this._histograms.size > 0) {
       const history: any = {};
       this._histograms.forEach( (histo, name) => {
         history[name] = histo.GetHistogram();

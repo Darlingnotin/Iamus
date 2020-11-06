@@ -15,7 +15,7 @@
 
 import { Config } from '@Base/config';
 
-import { MongoClient, Db } from 'mongodb';
+import { MongoClient, Db, FilterQuery } from 'mongodb';
 
 import deepmerge from 'deepmerge';
 
@@ -167,6 +167,13 @@ export async function deleteOne(pCollection: string, pCriteria: CriteriaFilter):
     ret = (result.deletedCount ?? 0) > 0;
   };
   return ret;
+};
+
+// Return a count of the documents that match the passed filter
+export async function countObjects(pCollection: string,
+                                  pFilter: CriteriaFilter): Promise<number> {
+  Logger.cdebug('db-query-detail', `Db.countObjects: collection=${pCollection}, criteria=${JSON.stringify(pFilter.criteriaParameters())}`);
+  return Datab.collection(pCollection).countDocuments(pFilter.criteriaParameters() as FilterQuery<any>);
 };
 
 // Low level generator to a stream of objects fitting a criteria.

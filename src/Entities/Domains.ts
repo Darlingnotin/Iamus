@@ -13,13 +13,14 @@
 //   limitations under the License.
 'use strict'
 
-import { DomainEntity } from '@Entities/DomainEntity';
-import { Places } from '@Entities/Places';
+import Config from '@Base/config';
+
+import { DomainEntity, domainFields } from '@Entities/DomainEntity';
 
 import { CriteriaFilter } from '@Entities/EntityFilters/CriteriaFilter';
 import { GenericFilter } from '@Entities/EntityFilters/GenericFilter';
 
-import { createObject, getObject, getObjects, updateObjectFields, deleteOne } from '@Tools/Db';
+import { createObject, getObject, getObjects, countObjects, updateObjectFields, deleteOne } from '@Tools/Db';
 
 import { GenUUID, IsNullOrEmpty, IsNotNullOrEmpty } from '@Tools/Misc';
 import { VKeyedCollection } from '@Tools/vTypes';
@@ -28,6 +29,42 @@ import { Logger } from '@Tools/Logging';
 export type DomainTestFunction = (domain: DomainEntity) => boolean;
 
 export let domainCollection = 'domains';
+
+// Initialize domain management.
+// Periodic checks on liveness of domains and resetting of values if not talking
+export function initDomains(): void {
+  // DEBUG DEBUG: for unknown reasons some field ops end up 'undefined'
+  Object.keys(domainFields).forEach( fieldName => {
+    const defn = domainFields[fieldName];
+    if (typeof(defn.validate) !== 'function') {
+      Logger.error(`initDomains: field ${defn.entity_field} validator is not a function`);
+    };
+    if (typeof(defn.getter) !== 'function') {
+      Logger.error(`initDomains: field ${defn.entity_field} getter is not a function`);
+    };
+    if (typeof(defn.setter) !== 'function') {
+      Logger.error(`initDomains: field ${defn.entity_field} setter is not a function`);
+    };
+  });
+  // END DEBUG DEBUG
+
+  setInterval( async () => {
+    // Find domains that are not heartbeating and reset activity if not talking
+    for await (const aDomain of Domains.enumerateAsync(new GenericFilter(
+                    { 'timeOfLastHeartbeat': { '$lt': Domains.dateWhenNotActive },
+                      '$or': [ { 'numUsers': { '$gt': 0 } }, { 'anonUsers': { '$gt': 0 } } ]
+                    }) ) ) {
+      Logger.info(`Domains: domain ${aDomain.name} not heartbeating. Zeroing users.`);
+      aDomain.numUsers = 0;
+      aDomain.anonUsers = 0;
+      const updates: VKeyedCollection = {
+        'numUsers': 0,
+        'anonUsers': 0
+      };
+      await Domains.updateEntityFields(aDomain, updates);
+    };
+  }, 1000 * 60 * 2 );
+};
 
 export const Domains = {
   async getDomainWithId(pDomainId: string): Promise<DomainEntity> {
@@ -67,6 +104,10 @@ export const Domains = {
     // await Places.removeMany(new GenericFilter({ 'domainId': pDomainEntity.id }));
     return;
   },
+  // Return the number of domains that match the criteria
+  async domainCount(pCriteria: CriteriaFilter): Promise<number> {
+    return countObjects(domainCollection, pCriteria);
+  },
   async *enumerateAsync(pPager: CriteriaFilter,
               pInfoer?: CriteriaFilter, pScoper?: CriteriaFilter): AsyncGenerator<DomainEntity> {
     for await (const domain of getObjects(domainCollection, pPager, pInfoer, pScoper)) {
@@ -78,6 +119,11 @@ export const Domains = {
   async updateEntityFields(pEntity: DomainEntity, pFields: VKeyedCollection): Promise<DomainEntity> {
     return updateObjectFields(domainCollection,
                               new GenericFilter({ 'id': pEntity.id }), pFields);
+  },
+  // Return the Date when an domain is considered inactive
+  dateWhenNotActive(): Date {
+    const notActiveTime = new Date(Date.now() - 1000 * Config["metaverse-server"]["domain-seconds-until-offline"]);
+    return notActiveTime;
   },
   // Return 'true' if the passed string could be a domainId. Used as a precheck before querying the Db.
   // For the moment, do a simple check to see if it is probably a GUID.

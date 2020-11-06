@@ -57,6 +57,8 @@ const procGetRequests: RequestHandler = async (req: Request, resp: Response, nex
     req.vRestResp.Data = {
       requests: reqs
     };
+
+    pager.addResponseFields(req);
   }
   else {
     req.vRestResp.respondFailure('No account specified');
@@ -68,7 +70,7 @@ export const name = '/api/v1/requests';
 
 export const router = Router();
 
-router.get(   '/api/v1/requests',                 [ setupMetaverseAPI,
-                                                  accountFromAuthToken,   // vRestResp.vAuthAccount
-                                                  procGetRequests,
-                                                  finishMetaverseAPI ] );
+router.get(   '/api/v1/requests', [ setupMetaverseAPI,    // req.vRestResp
+                                    accountFromAuthToken, // req.vAuthAccount
+                                    procGetRequests,
+                                    finishMetaverseAPI ] );
