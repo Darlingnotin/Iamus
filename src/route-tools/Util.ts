@@ -17,7 +17,7 @@
 import { Request } from 'express';
 
 import { Accounts } from '@Entities/Accounts';
-import { checkAvailability, AccountEntity, setAccountField } from '@Entities/AccountEntity';
+import { AccountEntity, setAccountField } from '@Entities/AccountEntity';
 
 import { Domains } from '@Entities/Domains';
 import { DomainEntity } from '@Entities/DomainEntity';
@@ -129,6 +129,7 @@ export async function buildDomainInfo(pDomain: DomainEntity): Promise<any> {
     'id': pDomain.id,
     'domainId': pDomain.id,
     'name': pDomain.name,
+    'sponsorAccountId': pDomain.sponsorAccountId,
     'label': pDomain.name,
     'network_address': pDomain.networkAddr,
     'network_port': pDomain.networkPort,
@@ -252,6 +253,8 @@ export async function buildPlaceInfoSmall(pPlace: PlaceEntity): Promise<any> {
     'name': pPlace.name,
     'address': pPlace.address,
     'description': pPlace.description,
+    'maturity': pPlace.maturity,
+    'tags': pPlace.tags,
     'thumbnail': pPlace.thumbnail,
     'images': pPlace.images
   };

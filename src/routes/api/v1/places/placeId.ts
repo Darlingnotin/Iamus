@@ -14,6 +14,8 @@
 
 'use strict';
 
+import Config from '@Base/config';
+
 import { Router, RequestHandler, Request, Response, NextFunction } from 'express';
 import { setupMetaverseAPI, finishMetaverseAPI, param1FromParams, placeFromParams } from '@Route-Tools/middleware';
 import { accountFromAuthToken } from '@Route-Tools/middleware';
@@ -23,43 +25,18 @@ import { checkAccessToEntity, Perm } from '@Route-Tools/Permissions';
 import { buildPlaceInfo } from '@Route-Tools/Util';
 
 import { Places } from '@Entities/Places';
+import { Maturity } from '@Entities/Sets/Maturity';
 import { setPlaceField } from '@Entities/PlaceEntity';
 
-import { PaginationInfo } from '@Entities/EntityFilters/PaginationInfo';
-import { AccountScopeFilter } from '@Entities/EntityFilters/AccountScopeFilter';
 import { IsNullOrEmpty } from '@Tools/Misc';
 import { VKeyedCollection } from '@Tools/vTypes';
 import { Logger } from '@Tools/Logging';
 
-const procGetPlaces: RequestHandler = async (req: Request, resp: Response, next: NextFunction) => {
-  if (req.vAuthAccount) {
-    const scoper = new AccountScopeFilter(req.vAuthAccount);
-    const pager = new PaginationInfo();
-
-    scoper.parametersFromRequest(req);
-    pager.parametersFromRequest(req);
-
-    const allPlaces: any[] = [];
-    for await (const place of Places.enumerateAsync(scoper, pager)) {
-      allPlaces.push(await buildPlaceInfo(place));
-    };
-
-    req.vRestResp.Data = {
-      'places': allPlaces
-    };
-
-    pager.addResponseFields(req);
-  }
-  else {
-    req.vRestResp.respondFailure('unauthorized');
-  };
-  next();
-};
-
 export const procGetPlacesPlaceId: RequestHandler = async (req: Request, resp: Response, next: NextFunction) => {
   if (req.vPlace) {
     req.vRestResp.Data = {
-      'place': await buildPlaceInfo(req.vPlace)
+      'place': await buildPlaceInfo(req.vPlace),
+      'maturity-categories': Maturity.MaturityCategories
     };
   }
   else {
@@ -105,7 +82,7 @@ export const procPutPlacesPlaceId: RequestHandler = async (req: Request, resp: R
 };
 // Delete a Place
 export const procDeletePlacesPlaceId: RequestHandler = async (req: Request, resp: Response, next: NextFunction) => {
-  if (req.vAuthAccount && req.vPlace && req.vDomain) {
+  if (req.vAuthAccount && req.vPlace) {
     if (checkAccessToEntity(req.vAuthToken, req.vDomain, [ Perm.SPONSOR, Perm.ADMIN ], req.vAuthAccount)) {
       Logger.info(`procDeletePlacesPlaceId: deleting place "${req.vPlace.name}", id=${req.vPlace.id}`);
       await Places.removePlace(req.vPlace);

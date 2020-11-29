@@ -30,7 +30,7 @@ import { buildUserInfo } from '@Route-Tools/Util';
 
 import { Logger } from '@Tools/Logging';
 import { IsNullOrEmpty, IsNotNullOrEmpty } from '@Tools/Misc';
-import { AccountRoles } from '@Entities/AccountRoles';
+import { Roles } from '@Entities/Sets/Roles';
 import { SArray } from '@Tools/vTypes';
 
 // metaverseServerApp.use(express.urlencoded({ extended: false }));
@@ -77,8 +77,10 @@ const procPostUsers: RequestHandler = async (req: Request, resp: Response, next:
       const userEmail: string = req.body.user.email;
       Logger.debug(`procPostUsers: request to create account for ${userName} with email ${userEmail}`);
       // Precheck format of username and email before trying to set them
-      if (await accountFields.username.validate(accountFields.username, 'username', userName)) {
-        if (await accountFields.email.validate(accountFields.email, 'email', userEmail)) {
+      let ifValid = await accountFields.username.validate(accountFields.username, 'username', userName);
+      if (ifValid.valid) {
+        ifValid = await accountFields.email.validate(accountFields.email, 'email', userEmail);
+        if (ifValid.valid) {
           // See if account already exists
           let prevAccount = await Accounts.getAccountWithUsername(userName);
           if (IsNullOrEmpty(prevAccount)) {
@@ -91,7 +93,7 @@ const procPostUsers: RequestHandler = async (req: Request, resp: Response, next:
                   // If we're creating the admin account, assign it admin privilages
                   if (newAcct.username === adminAccountName) {
                     if (IsNullOrEmpty(newAcct.roles)) newAcct.roles = [];
-                    SArray.add(newAcct.roles, AccountRoles.ADMIN);
+                    SArray.add(newAcct.roles, Roles.ADMIN);
                     Logger.info(`procPostUsers: setting new account ${adminAccountName} as admin`);
                   }
                   newAcct.IPAddrOfCreator = req.vSenderKey;
@@ -116,11 +118,11 @@ const procPostUsers: RequestHandler = async (req: Request, resp: Response, next:
           };
         }
         else {
-          req.vRestResp.respondFailure('Badly formatted email');
+          req.vRestResp.respondFailure(ifValid.reason ?? 'Badly formatted email');
         };
       }
       else {
-        req.vRestResp.respondFailure('Badly formatted username');
+        req.vRestResp.respondFailure(ifValid.reason ?? 'Badly formatted username');
       };
     }
     else {

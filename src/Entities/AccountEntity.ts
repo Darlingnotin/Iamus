@@ -16,10 +16,10 @@
 import { Entity } from '@Entities/Entity';
 import { AuthToken } from '@Entities/AuthToken';
 import { Accounts } from '@Entities/Accounts';
-import { AccountRoles } from '@Entities/AccountRoles';
-import { AccountAvailability } from '@Entities/AccountAvailability';
+import { Roles } from '@Entities/Sets/Roles';
+import { Availability } from '@Entities/Sets/Availability';
 
-import { isStringValidator, isBooleanValidator, isPathValidator, isNumberValidator, isSArraySet, isDateValidator } from '@Route-Tools/GetterSetter';
+import { isStringValidator, isBooleanValidator, isPathValidator, isNumberValidator, isSArraySet, isDateValidator, ValidateResponse } from '@Route-Tools/GetterSetter';
 import { simpleGetter, simpleSetter, sArraySetter, dateStringGetter } from '@Route-Tools/GetterSetter';
 import { FieldDefn, noGetter, noSetter, verifyAllSArraySetValues } from '@Route-Tools/GetterSetter';
 import { getEntityField, setEntityField, getEntityUpdateForField } from '@Route-Tools/GetterSetter';
@@ -69,12 +69,6 @@ export class AccountEntity implements Entity {
   public timeOfLastHeartbeat: Date; // when we last heard from this user
 };
 
-// Helper function that checks to make sure 'availability' is the right value.
-// Returns 'true' if availability is legal
-export function checkAvailability(pAvailability: string): boolean {
-  return ['none', 'all', 'friends', 'connections'].includes(pAvailability.toLowerCase());
-};
-
 // Get the value of a domain field with the fieldname.
 // Checks to make sure the getter has permission to get the values.
 // Returns the value. Could be 'undefined' whether the requestor doesn't have permissions or that's
@@ -91,7 +85,7 @@ export async function setAccountField(pAuthToken: AuthToken,  // authorization f
             pField: string, pVal: any,          // field being changed and the new value
             pRequestingAccount?: AccountEntity, // Account associated with pAuthToken, if known
             pUpdates?: VKeyedCollection         // where to record updates made (optional)
-                    ): Promise<boolean> {
+                    ): Promise<ValidateResponse> {
   return setEntityField(accountFields, pAuthToken, pAccount, pField, pVal, pRequestingAccount, pUpdates);
 };
 // Generate an 'update' block for the specified field or fields.
@@ -120,19 +114,28 @@ export const accountFields: { [key: string]: FieldDefn } = {
     entity_field: 'username',
     request_field_name: 'username',
     get_permissions: [ 'all' ],
-    set_permissions: [ 'none' ],
-    validate: async (pField: FieldDefn, pEntity: Entity, pVal: any): Promise<boolean> => {
-      let valid: boolean = false;
+    set_permissions: [ 'owner', 'admin' ],
+    validate: async (pField: FieldDefn, pEntity: Entity, pVal: any): Promise<ValidateResponse> => {
+      let validity: ValidateResponse;
       if (typeof(pVal) === 'string') {
-        // Check username for latin alpha-numeric
-        valid = /^[A-Za-z][A-Za-z0-9+\-_\.]*$/.test(pVal);
+        if (/^[A-Za-z][A-Za-z0-9+\-_\.]*$/.test(pVal)) {
+          // Make sure no other account has this username
+          const otherAccount = await Accounts.getAccountWithUsername(pVal);
+          if (IsNullOrEmpty(otherAccount) || otherAccount.id === (pEntity as AccountEntity).id) {
+            validity = { valid: true };
+          }
+          else {
+            validity = { valid: false, reason: 'username already exists' };
+          };
+        }
+        else {
+          validity = { valid: false, reason: 'username can contain only A-Za-z0-9+-_.' };
+        };
+      }
+      else {
+        validity = { valid: false, reason: 'username must be a simple string' };
       };
-      // Make sure no other account is using this username
-      if (valid) {
-        const otherAccount = await Accounts.getAccountWithUsername(pVal);
-        valid = IsNullOrEmpty(otherAccount) || otherAccount.id === (pEntity as AccountEntity).id;
-      };
-      return valid;
+      return validity;
     },
     setter: simpleSetter,
     getter: simpleGetter
@@ -142,18 +145,31 @@ export const accountFields: { [key: string]: FieldDefn } = {
     request_field_name: 'email',
     get_permissions: [ 'all' ],
     set_permissions: [ 'owner', 'admin' ],
-    validate: async (pField: FieldDefn, pEntity: Entity, pVal: any): Promise<boolean> => {
-      let valid: boolean = false;
+    validate: async (pField: FieldDefn, pEntity: Entity, pVal: any): Promise<ValidateResponse> => {
+      let validity: ValidateResponse;
       if (typeof(pVal) === 'string') {
         // Check email for sanity
-        valid = /^[A-Za-z0-9+\-_\.]+@[A-Za-z0-9-\.]+$/.test(pVal);
+        // Old style check which doesn't cover all the RFC complient email addresses possible
+        // if (/^[A-Za-z0-9+\-_\.]+@[A-Za-z0-9-\.]+$/.test(pVal)) {
+        // Much simpiler check that just makes sure there is one AT sign
+        if ((pVal.match(/@/g) || []).length === 1) {
+          // Make sure no other account is using this email address
+          const otherAccount = await Accounts.getAccountWithEmail(pVal);
+          if (IsNullOrEmpty(otherAccount) || otherAccount.id === (pEntity as AccountEntity).id) {
+            validity = { valid: true };
+          }
+          else {
+            validity = { valid: false, reason: 'email already exists for another account' };
+          };
+        }
+        else {
+          validity = { valid: false, reason: 'email address needs one AT sign' };
+        };
+      }
+      else {
+        validity = { valid: false, reason: 'email must be a simple string' };
       };
-      // Make sure no other account is using this email address
-      if (valid) {
-        const otherAccount = await Accounts.getAccountWithEmail(pVal);
-        valid = IsNullOrEmpty(otherAccount) || otherAccount.id === (pEntity as AccountEntity).id;
-      };
-      return valid;
+      return validity;
     },
     setter: (pField: FieldDefn, pEntity: Entity, pVal: any): any => {
       // emails are stored in lower-case
@@ -265,8 +281,11 @@ export const accountFields: { [key: string]: FieldDefn } = {
     request_field_name: 'availability',
     get_permissions: [ 'all' ],
     set_permissions: [ 'owner', 'admin' ],
-    validate: async (pField: FieldDefn, pEntity: Entity, pVal: any): Promise<boolean> => {
-      return verifyAllSArraySetValues(pVal, AccountAvailability.KnownAvailability);
+    validate: async (pField: FieldDefn, pEntity: Entity, pVal: any): Promise<ValidateResponse> => {
+      if (await verifyAllSArraySetValues(pVal, Availability.KnownAvailability)) {
+        return { valid: true };
+      }
+      return { valid: false, reason: 'not legal availability value'};
     },
     setter: sArraySetter,
     getter: simpleGetter
@@ -361,8 +380,11 @@ export const accountFields: { [key: string]: FieldDefn } = {
     request_field_name: 'roles',
     get_permissions: [ 'all' ],
     set_permissions: [ 'admin' ],
-    validate: async (pField: FieldDefn, pEntity: Entity, pVal: any): Promise<boolean> => {
-      return verifyAllSArraySetValues(pVal, AccountRoles.KnownRole);
+    validate: async (pField: FieldDefn, pEntity: Entity, pVal: any): Promise<ValidateResponse> => {
+      if (await verifyAllSArraySetValues(pVal, Roles.KnownRole)) {
+        return { valid: true };
+      }
+      return { valid: false, reason: 'not valid role name'};
     },
     setter: sArraySetter,
     getter: simpleGetter
@@ -389,7 +411,7 @@ export const accountFields: { [key: string]: FieldDefn } = {
     entity_field: 'timeOfLastHeartbeat',
     request_field_name: 'time_of_last_heartbeat',
     get_permissions: [ 'all' ],
-    set_permissions: [ 'none' ],
+    set_permissions: [ 'admin' ],
     validate: isDateValidator,
     setter: noSetter,
     getter: dateStringGetter

@@ -64,7 +64,8 @@ const procPostDomains: RequestHandler = async (req: Request, resp: Response, nex
     if (req.body && req.body.domain && req.body.domain.label) {
       const newDomainName = req.body.domain.label;
       if (IsNotNullOrEmpty(newDomainName)) {
-        if (await domainFields.name.validate(domainFields.name, 'name', newDomainName)) {
+        const ifValid = await domainFields.name.validate(domainFields.name, req.vAuthAccount, newDomainName);
+        if (ifValid.valid) {
           const generatedAPIkey: string = GenUUID();
 
           const newDomain = Domains.createDomain();
@@ -72,6 +73,13 @@ const procPostDomains: RequestHandler = async (req: Request, resp: Response, nex
           newDomain.apiKey = generatedAPIkey;
           if (req.vSenderKey) {
             newDomain.iPAddrOfFirstContact = req.vSenderKey;
+          };
+
+          if (req.body.domain.network_address) {
+            newDomain.networkAddr = req.body.domain.network_address;
+          };
+          if (req.body.domain.network_port) {
+            newDomain.networkPort = req.body.domain.network_port;
           };
 
           // Creating a domain also creates a Place for that domain
@@ -105,7 +113,7 @@ const procPostDomains: RequestHandler = async (req: Request, resp: Response, nex
           req.vRestResp.addAdditionalField('domain', domainInfo);
         }
         else {
-          req.vRestResp.respondFailure('name contains not allowed characters');
+          req.vRestResp.respondFailure(ifValid.reason ?? 'invalid domain name');
         };
       }
       else {

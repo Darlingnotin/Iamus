@@ -14,21 +14,21 @@
 
 'use strict'
 
-// Class to manage the manipulations on roles that accounts can have
-export class AccountAvailability {
-  // at the moment, the only role is 'admin'
+import { Logger } from '@Tools/Logging';
+
+export class Availability {
   public static NONE: string = 'none';        // no one can see me
   public static FRIENDS: string = 'friends';  // available to friends
   public static CONNECTIONS: string = 'connections';     // available to connections
   public static ALL: string = 'all';          // available to all
 
-  // See if the passed role code is a known role token
-  static KnownAvailability(pAvailabilit: string): boolean {
-    return [ AccountAvailability.NONE,
-            AccountAvailability.FRIENDS,
-            AccountAvailability.CONNECTIONS,
-            AccountAvailability.ALL
-           ].includes(pAvailabilit);
+  // See if the passed availability code is a known availability token
+  static KnownAvailability(pAvailability: string): boolean {
+    return [ Availability.NONE,
+            Availability.FRIENDS,
+            Availability.CONNECTIONS,
+            Availability.ALL
+           ].includes(pAvailability);
   };
 
 };
