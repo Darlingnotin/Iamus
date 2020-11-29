@@ -17,7 +17,7 @@
 import { Request } from 'express';
 
 import { Accounts } from '@Entities/Accounts';
-import { AccountEntity, setAccountField } from '@Entities/AccountEntity';
+import { AccountEntity } from '@Entities/AccountEntity';
 
 import { Domains } from '@Entities/Domains';
 import { DomainEntity } from '@Entities/DomainEntity';
@@ -31,6 +31,7 @@ import { createPublicKey } from 'crypto';
 import { VKeyedCollection, VKeyValue } from '@Tools/vTypes';
 import { IsNotNullOrEmpty } from '@Tools/Misc';
 import { Logger } from '@Tools/Logging';
+import { Maturity } from '@Entities/Sets/Maturity';
 
 // The public_key is sent as a binary (DER) form of a PKCS1 key.
 // To keep backward compatibility, we convert the PKCS1 key into a SPKI key in PEM format
@@ -75,7 +76,7 @@ export async function updateLocationInfo(pReq: Request): Promise<VKeyedCollectio
       for (const field of ['connected', 'path', 'place_id', 'domain_id',
                             'network_address', 'node_id', 'availability']) {
         if (loc.hasOwnProperty(field)) {
-          await setAccountField(pReq.vAuthToken, pReq.vAuthAccount, field, loc[field], pReq.vAuthAccount, newLoc);
+          await Accounts.setField(pReq.vAuthToken, pReq.vAuthAccount, field, loc[field], pReq.vAuthAccount, newLoc);
         };
       };
     }
@@ -161,7 +162,7 @@ export async function buildDomainInfoV1(pDomain: DomainEntity): Promise<any> {
     'total_users': pDomain.numUsers + pDomain.anonUsers,
     'capacity': pDomain.capacity,
     'description': pDomain.description,
-    'maturity': pDomain.maturity,
+    'maturity': pDomain.maturity ?? Maturity.UNRATED,
     'restriction': pDomain.restriction,
     'managers': pDomain.managers,
     'tags': pDomain.tags,
@@ -253,7 +254,7 @@ export async function buildPlaceInfoSmall(pPlace: PlaceEntity): Promise<any> {
     'name': pPlace.name,
     'address': pPlace.address,
     'description': pPlace.description,
-    'maturity': pPlace.maturity,
+    'maturity': pPlace.maturity ?? Maturity.UNRATED,
     'tags': pPlace.tags,
     'thumbnail': pPlace.thumbnail,
     'images': pPlace.images

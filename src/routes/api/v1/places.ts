@@ -24,7 +24,8 @@ import { buildPlaceInfo } from '@Route-Tools/Util';
 import { Domains } from '@Entities/Domains';
 import { Places } from '@Entities/Places';
 
-import { checkAccessToEntity, Perm } from '@Route-Tools/Permissions';
+import { Perm } from '@Route-Tools/Perm';
+import { checkAccessToEntity } from '@Route-Tools/Permissions';
 
 import { PaginationInfo } from '@Entities/EntityFilters/PaginationInfo';
 import { PlaceFilterInfo } from '@Entities/EntityFilters/PlaceFilterInfo';
@@ -96,6 +97,7 @@ export const procPostPlaces: RequestHandler = async (req: Request, resp: Respons
             newPlace.description = requestedDesc;
             newPlace.address = requestedAddr;
             newPlace.domainId = aDomain.id;
+            newPlace.maturity = aDomain.maturity ?? Maturity.UNRATED;
             Places.addPlace(newPlace);
 
             req.vRestResp.Data = buildPlaceInfo(newPlace, aDomain);

@@ -27,7 +27,7 @@ import { Logger } from '@Tools/Logging';
 // Process a request that wants to filter Account collection with parameters:
 export class PlaceFilterInfo extends CriteriaFilter {
 
-  private _maturity: string;
+  private _maturity: string[];
   private _tags: string[];
 
   // Set to 'true' if the pagination was passed in the criteria query parameters
@@ -46,8 +46,24 @@ export class PlaceFilterInfo extends CriteriaFilter {
     try {
       // Comma separated list of attribute criteria.
       if (typeof(pRequest.query.maturity) === 'string') {
-        if (Maturity.KnownMaturity(pRequest.query.maturity)) {
-          this._maturity = pRequest.query.maturity;
+        this._maturity = pRequest.query.maturity.split(',');
+        // Check to make sure all the pieces are legal maturity names
+        let allLegal = true;
+        for (const mat of this._maturity) {
+          if ( ! Maturity.KnownMaturity(mat)) {
+            allLegal = false;
+            break;
+          };
+        };
+        if (allLegal) {
+          if (this._maturity.includes(Maturity.UNRATED)) {
+            // Adding a 'null' to the set causes places with no rating to be included
+            this._maturity.push(null);
+          };
+        }
+        else {
+          Logger.cdebug('query-detail', `PlaceFilterInfo.parametersFromRequest: passed undefined maturity level ${JSON.stringify(this._maturity)}`);
+          this._maturity = undefined;
         };
       };
 
@@ -57,7 +73,7 @@ export class PlaceFilterInfo extends CriteriaFilter {
         this._tags = pRequest.query.tag.split(',');
       };
 
-      Logger.cdebug('query-detail', `PlaceFilterInfo.parametersFromRequest: _maturity=${this._maturity}, _tags=${JSON.stringify(this._tags)}`);
+      Logger.cdebug('query-detail', `PlaceFilterInfo.parametersFromRequest: _maturity=${JSON.stringify(this._maturity)}, _tags=${JSON.stringify(this._tags)}`);
     }
     catch (e) {
       Logger.error('PlaceFilterInfo: parameters from request: exception: ' + e);
@@ -80,12 +96,12 @@ export class PlaceFilterInfo extends CriteriaFilter {
     else {
       if (this._maturity) {
         if (pThingy.hasOwnProperty('maturity')) {
-          if ((pThingy as PlaceEntity).maturity === this._maturity) {
+          if (this._maturity.includes((pThingy as PlaceEntity).maturity)) {
             ret = true;
           };
         }
         else {
-          if (this._maturity === Maturity.UNRATED) {
+          if (this._maturity.includes(Maturity.UNRATED)) {
             ret = true;
           };
         };
@@ -107,12 +123,7 @@ export class PlaceFilterInfo extends CriteriaFilter {
     this._doingQuery = true;
     const criteria:VKeyedCollection = {};
     if (this._maturity) {
-      if (this._maturity === Maturity.UNRATED) {
-        criteria.maturity = { '$in': [ Maturity.UNRATED, null ]};
-      }
-      else {
-        criteria.maturity = this._maturity;
-      };
+      criteria.maturity = { '$in': this._maturity }
     };
     if (this._tags) {
       criteria.tags = { '$in': this._tags }
